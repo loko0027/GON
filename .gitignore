@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# native build artifacts and credentials
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# metro bundler cache and health check
+.metro-health-check*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS files
+.DS_Store
+*.pem
+
+# local environment files
+.env*.local
+.env
+
+# typescript build info
+*.tsbuildinfo
+
+# Ignorar pastas nativas geradas pelo expo prebuild
+android/
+ios/

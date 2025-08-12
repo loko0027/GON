@@ -18,7 +18,7 @@ import {
   SaquePix,
   ChamadoSuporte,
   MensagemSuporte,
-  User, // Assumindo que 'User' é a interface para a tabela 'usuarios'
+  User,
 } from '@/types';
 
 interface AppContextType {
@@ -44,6 +44,7 @@ interface AppContextType {
   recusarConvocacao: (convocacaoId: string) => Promise<void>;
   avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
   avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
+  confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
 
   recarregarCoins: (recarga: Omit<RecargaCoins, 'id' | 'created_at'>) => Promise<void>;
   aprovarRecarga: (recargaId: string) => Promise<void>;
@@ -62,7 +63,11 @@ interface AppContextType {
   getMensagensPorChamado: (chamadoId: string) => MensagemSuporte[];
 
   loadData: () => Promise<void>;
-  loadChamadosSuporte: () => Promise<void>; // Exposto para ser chamado de fora
+  loadChamadosSuporte: () => Promise<void>;
+
+  // Novas funções adicionadas
+  isGoleiroAvaliado: (convocacaoId: string) => boolean;
+  isOrganizadorAvaliado: (convocacaoId: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -117,32 +122,9 @@ export function AppProvider({ children }: AppProviderProps) {
         throw error;
       }
 
-      const convosComAvaliacao = (data || []).filter(c => {
-        const isPassada = new Date(c.data_hora_fim) < new Date();
-        const isAceita = c.status === 'aceito';
-
-        if (!isAceita || !isPassada) {
-            return (user.tipo_usuario === 'goleiro' && c.goleiro_id === user.id) ||
-                   (user.tipo_usuario === 'organizador' && c.organizador_id === user.id);
-        }
-
-        if (user.tipo_usuario === 'goleiro') {
-          const jaAvaliouOrganizador = c.avaliacoes_organizador && c.avaliacoes_organizador.some(
-            (avaliacao: any) => avaliacao.goleiro_id === user.id && avaliacao.convocacao_id === c.id
-          );
-          return c.goleiro_id === user.id && !jaAvaliouOrganizador;
-
-        } else if (user.tipo_usuario === 'organizador') {
-          const jaAvaliouGoleiro = c.avaliacoes_goleiro && c.avaliacoes_goleiro.some(
-            (avaliacao: any) => c.goleiro_id === c.goleiro_id && avaliacao.convocacao_id === c.id // organizador_id é implícito aqui se a avaliação for do organizador
-          );
-          return c.organizador_id === user.id && !jaAvaliouGoleiro;
-        }
-
-        return false;
-      });
-
-      setConvocacoes(convosComAvaliacao);
+      // CORREÇÃO: Removido o filtro complexo. Agora a UI decide o que mostrar.
+      // O filtro por `or` já garante que o usuário só veja as suas convocações.
+      setConvocacoes(data || []);
 
     } catch (e) {
       console.error("Erro ao carregar convocações:", e);
@@ -197,7 +179,6 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // CORREÇÃO: loadChamadosSuporte agora busca os dados do solicitante
   const loadChamadosSuporte = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -205,7 +186,7 @@ export function AppProvider({ children }: AppProviderProps) {
         .select(`
           *,
           solicitante:usuarios!solicitante_id(id, nome, tipo_usuario)
-        `); // Adiciona o join para o solicitante
+        `);
       if (error) throw error;
       setChamadosSuporte(data || []);
     } catch (e) {
@@ -214,7 +195,6 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // CORREÇÃO: loadMensagensSuporte agora busca os dados do autor
   const loadMensagensSuporte = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -222,7 +202,7 @@ export function AppProvider({ children }: AppProviderProps) {
         .select(`
           *,
           autor:usuarios!autor_id(id, nome, tipo_usuario)
-        `); // Adiciona o join para o autor
+        `);
       if (error) throw error;
       setMensagensSuporte(data || []);
     } catch (e) {
@@ -332,7 +312,6 @@ export function AppProvider({ children }: AppProviderProps) {
   // Recargas pendentes
   const getRecargasPendentes = useCallback(() => recargas.filter(recarga => recarga.status === 'pendente'), [recargas]);
 
-
   const aprovarSaque = useCallback(async (saqueId: string) => {
     try {
       const { error } = await supabase
@@ -394,10 +373,9 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       // 3. Atualizar o saldo do organizador
-      // Tenta buscar o saldo existente
       const { data: saldoExistente, error: saldoFetchError } = await supabase
         .from('saldos')
-        .select('saldo_coins')
+        .select('saldo_coins, saldo_retido')
         .eq('usuario_id', organizador_id)
         .single();
 
@@ -450,6 +428,17 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [loadRecargas]);
 
+  // Adicione estas funções auxiliares
+  const isGoleiroAvaliado = useCallback((convocacaoId: string): boolean => {
+    const convocacao = convocacoes.find(c => c.id === convocacaoId);
+    return convocacao?.avaliado_goleiro || false;
+  }, [convocacoes]);
+
+  const isOrganizadorAvaliado = useCallback((convocacaoId: string): boolean => {
+    const convocacao = convocacoes.find(c => c.id === convocacaoId);
+    return convocacao?.avaliado_organizador || false;
+  }, [convocacoes]);
+
   // AVALIAÇÕES
   const avaliarGoleiro = useCallback(async (convocacaoId: string, nota: number) => {
     try {
@@ -468,29 +457,70 @@ export function AppProvider({ children }: AppProviderProps) {
         return;
       }
 
+      // Inserir avaliação
       const { data, error } = await supabase
         .from('avaliacoes_goleiro')
         .upsert({
           convocacao_id: convocacaoId,
           nota,
+          organizador_id: user.id,
+          goleiro_id: convocacao.goleiro_id,
         })
         .select()
         .single();
 
-      if (error) {
-        Alert.alert('Erro', 'Não foi possível enviar a avaliação do goleiro. ' + error.message);
-        return;
-      }
+      if (error) throw error;
 
-      Alert.alert('Sucesso', `Avaliação do goleiro enviada: ${nota} estrelas`);
+      // Atualizar flag na convocação
+      const { error: updateError } = await supabase
+        .from('convocacoes')
+        .update({ avaliado_goleiro: true })
+        .eq('id', convocacaoId);
+
+      if (updateError) throw updateError;
+
+      // Atualizar saldos (código existente)
+      const coins_calculados = 20 + nota * 5;
+
+      const { data: saldoGoleiro } = await supabase
+        .from('saldos')
+        .select('saldo_coins')
+        .eq('usuario_id', convocacao.goleiro_id)
+        .single();
+
+      const novoSaldoCoinsGoleiro = (saldoGoleiro?.saldo_coins || 0) + coins_calculados;
+
+      await supabase
+        .from('saldos')
+        .upsert({
+          usuario_id: convocacao.goleiro_id,
+          saldo_coins: novoSaldoCoinsGoleiro,
+        }, { onConflict: 'usuario_id' });
+
+      const { data: saldoOrganizador } = await supabase
+        .from('saldos')
+        .select('saldo_retido')
+        .eq('usuario_id', user.id)
+        .single();
+
+      const novoSaldoRetidoOrganizador = (saldoOrganizador?.saldo_retido || 0) - convocacao.valor_retido;
+
+      await supabase
+        .from('saldos')
+        .upsert({
+          usuario_id: user.id,
+          saldo_retido: novoSaldoRetidoOrganizador,
+        }, { onConflict: 'usuario_id' });
+
+      Alert.alert('Sucesso', `Avaliação do goleiro enviada: ${nota} estrelas e ${coins_calculados} coins adicionados.`);
       await loadConvocacoes();
+      await loadSaldos();
 
-    }
-    catch (err) {
+    } catch (err) {
       console.error("Erro em avaliarGoleiro:", err);
       Alert.alert('Erro', 'Erro inesperado ao enviar avaliação do goleiro.');
     }
-  }, [convocacoes, loadConvocacoes, user]);
+  }, [convocacoes, loadConvocacoes, loadSaldos, user]);
 
 
   const avaliarOrganizador = useCallback(async (convocacaoId: string, categoria: string) => {
@@ -511,30 +541,27 @@ export function AppProvider({ children }: AppProviderProps) {
         return;
       }
 
-      const avaliacaoExistente = convocacao.avaliacoes_organizador?.find(
-        (avaliacao: any) => avaliacao.goleiro_id === user.id
-      );
-      if (avaliacaoExistente) {
-        Alert.alert('Aviso', 'Este organizador já foi avaliado por você para esta convocação.');
-        return;
-      }
-
-      const payload = {
-        convocacao_id: convocacaoId,
-        goleiro_id: user.id,
-        categoria_avaliacao: categoria,
-      };
-
+      // Inserir avaliação
       const { data, error } = await supabase
         .from('avaliacoes_organizador')
-        .upsert(payload)
+        .upsert({
+          convocacao_id: convocacaoId,
+          goleiro_id: user.id,
+          organizador_id: convocacao.organizador_id,
+          categoria_avaliacao: categoria,
+        })
         .select()
         .single();
 
-      if (error) {
-        Alert.alert('Erro', 'Não foi possível enviar a avaliação do organizador. ' + error.message);
-        return;
-      }
+      if (error) throw error;
+
+      // Atualizar flag na convocação
+      const { error: updateError } = await supabase
+        .from('convocacoes')
+        .update({ avaliado_organizador: true })
+        .eq('id', convocacaoId);
+
+      if (updateError) throw updateError;
 
       Alert.alert('Sucesso', `Avaliação do organizador enviada: ${categoria}`);
       await loadConvocacoes();
@@ -545,18 +572,83 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [convocacoes, loadConvocacoes, user]);
 
+
+  // FUNÇÃO FALTANDO
+  const confirmarPresenca = useCallback(async (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => {
+    try {
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const convocacao = convocacoes.find(c => c.id === convocacaoId);
+      if (!convocacao) throw new Error('Convocação não encontrada.');
+
+      if (convocacao.organizador_id !== user.id) {
+        Alert.alert('Erro', 'Você não é o organizador desta convocação para confirmar a presença.');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ presenca_status: status })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await loadConvocacoes();
+      Alert.alert('Sucesso', `Presença confirmada como: ${status}`);
+
+    } catch (e: any) {
+      console.error("Erro ao confirmar presença:", e);
+      Alert.alert('Erro', 'Não foi possível confirmar a presença. ' + e.message);
+    }
+  }, [user, loadConvocacoes, convocacoes]);
+
   // Outras funções
   const criarConvocacao = useCallback(async (convocacao: Omit<Convocacao, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const { error } = await supabase.from('convocacoes').insert(convocacao);
-      if (error) throw error;
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // 1. Tentar buscar o saldo do organizador
+      const { data: saldoData, error: saldoFetchError } = await supabase
+        .from('saldos')
+        .select('saldo_coins, saldo_retido')
+        .eq('usuario_id', user.id)
+        .single();
+
+      if (saldoFetchError) {
+        Alert.alert('Erro', 'Saldo do organizador não encontrado.');
+        return;
+      }
+      if (saldoData.saldo_coins < convocacao.valor_retido) {
+        Alert.alert('Saldo Insuficiente', 'Você não tem coins suficientes para criar esta convocação.');
+        return;
+      }
+
+      // 2. Criar a convocação
+      const { error: convocacaoError } = await supabase.from('convocacoes').insert(convocacao);
+      if (convocacaoError) throw convocacaoError;
+
+      // 3. Atualizar o saldo do organizador, retendo os coins
+      const novoSaldoCoins = saldoData.saldo_coins - convocacao.valor_retido;
+      const novoSaldoRetido = (saldoData.saldo_retido || 0) + convocacao.valor_retido;
+
+      const { error: saldoUpdateError } = await supabase
+        .from('saldos')
+        .update({
+          saldo_coins: novoSaldoCoins,
+          saldo_retido: novoSaldoRetido,
+        })
+        .eq('usuario_id', user.id);
+
+      if (saldoUpdateError) throw saldoUpdateError;
+
       await loadConvocacoes();
-      Alert.alert('Sucesso', 'Convocação criada com sucesso!');
+      await loadSaldos();
+      Alert.alert('Sucesso', 'Convocação criada com sucesso! Coins retidos do seu saldo.');
     } catch (error) {
       console.error("Erro em criarConvocacao:", error);
       Alert.alert('Erro', 'Não foi possível criar a convocação.');
     }
-  }, [loadConvocacoes]);
+  }, [user, loadConvocacoes, loadSaldos]);
 
   const aceitarConvocacao = useCallback(async (convocacaoId: string) => {
     try {
@@ -618,6 +710,22 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
+      // Tentar buscar o saldo do goleiro
+      const { data: saldoData, error: saldoFetchError } = await supabase
+        .from('saldos')
+        .select('saldo_coins')
+        .eq('usuario_id', user.id)
+        .single();
+
+      if (saldoFetchError) {
+        Alert.alert('Erro', 'Saldo do goleiro não encontrado.');
+        return;
+      }
+      if (saldoData.saldo_coins < saque.valor_saque) {
+        Alert.alert('Saldo Insuficiente', 'Você não tem coins suficientes para solicitar este saque.');
+        return;
+      }
+
       const { error } = await supabase.from('saques_pix').insert({
         ...saque,
         goleiro_id: user.id,
@@ -625,13 +733,24 @@ export function AppProvider({ children }: AppProviderProps) {
       });
 
       if (error) throw error;
+
+      // Retirar os coins do saldo do goleiro
+      const novoSaldoCoins = saldoData.saldo_coins - saque.valor_saque;
+      const { error: saldoUpdateError } = await supabase
+        .from('saldos')
+        .update({ saldo_coins: novoSaldoCoins })
+        .eq('usuario_id', user.id);
+
+      if (saldoUpdateError) throw saldoUpdateError;
+
       await loadSaques();
+      await loadSaldos();
       Alert.alert('Sucesso', 'Saque solicitado com sucesso!');
     } catch (error) {
       console.error("Erro em solicitarSaque:", error);
       Alert.alert('Erro', 'Não foi possível solicitar o saque.');
     }
-  }, [user, loadSaques]);
+  }, [user, loadSaques, loadSaldos]);
 
   const criarChamadoSuporte = useCallback(async (chamado: Omit<ChamadoSuporte, 'id' | 'created_at' | 'solicitante'>) => {
     try {
@@ -639,7 +758,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const { error } = await supabase.from('chamados_suporte').insert({
         ...chamado,
-        solicitante_id: user.id, // CORRIGIDO: de 'usuario_id' para 'solicitante_id'
+        solicitante_id: user.id,
         status: 'pendente'
       });
 
@@ -648,7 +767,7 @@ export function AppProvider({ children }: AppProviderProps) {
       Alert.alert('Sucesso', 'Chamado criado com sucesso!');
     } catch (error) {
       console.error("Erro em criarChamadoSuporte:", error);
-      Alert.alert('Erro', 'Não foi possível criar o chamado. Verifique o console para mais detalhes.');
+      Alert.alert('Erro', 'Não foi possível criar o chamado de suporte.');
     }
   }, [user, loadChamadosSuporte]);
 
@@ -700,6 +819,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [loadChamadosSuporte]);
 
+
   const enviarMensagemSuporte = useCallback(async (mensagem: Omit<MensagemSuporte, 'id' | 'created_at' | 'autor'>) => {
     try {
       if (!user) throw new Error('Usuário não autenticado');
@@ -710,28 +830,27 @@ export function AppProvider({ children }: AppProviderProps) {
       });
 
       if (error) throw error;
-      await loadMensagensSuporte(); // Recarrega todas as mensagens (incluindo as novas com autor)
+      await loadMensagensSuporte();
+      Alert.alert('Sucesso', 'Mensagem enviada com sucesso!');
     } catch (error) {
       console.error("Erro em enviarMensagemSuporte:", error);
       Alert.alert('Erro', 'Não foi possível enviar a mensagem.');
     }
   }, [user, loadMensagensSuporte]);
 
-  const getChamadosPorUsuario = useCallback((userId: string) => {
+  const getSaldo = useCallback((userId: string): Saldo => {
+    return saldos.find(s => s.usuario_id === userId) || { usuario_id: userId, saldo_coins: 0, saldo_retido: 0 };
+  }, [saldos]);
+
+  const getChamadosPorUsuario = useCallback((userId: string): ChamadoSuporte[] => {
     return chamadosSuporte.filter(c => c.solicitante_id === userId);
   }, [chamadosSuporte]);
 
-  const getMensagensPorChamado = useCallback((chamadoId: string) => {
-    // Esta função agora recebe mensagens que já têm o autor populado do loadMensagensSuporte
+  const getMensagensPorChamado = useCallback((chamadoId: string): MensagemSuporte[] => {
     return mensagensSuporte.filter(m => m.chamado_id === chamadoId);
   }, [mensagensSuporte]);
 
-  // Saldo
-  const getSaldo = useCallback((userId: string): Saldo => {
-    const foundSaldo = saldos.find(s => s.usuario_id === userId);
-    return foundSaldo || { usuario_id: userId, saldo_coins: 0, saldo_retido: 0, updated_at: new Date().toISOString() };
-  }, [saldos]);
-
+  // Atualize o retorno do provider para incluir as novas funções
   return (
     <AppContext.Provider
       value={{
@@ -754,6 +873,7 @@ export function AppProvider({ children }: AppProviderProps) {
         recusarConvocacao,
         avaliarGoleiro,
         avaliarOrganizador,
+        confirmarPresenca,
         recarregarCoins,
         aprovarRecarga,
         rejeitarRecarga,
@@ -769,7 +889,9 @@ export function AppProvider({ children }: AppProviderProps) {
         getChamadosPorUsuario,
         getMensagensPorChamado,
         loadData,
-        loadChamadosSuporte, // Exposto
+        loadChamadosSuporte,
+        isGoleiroAvaliado,
+        isOrganizadorAvaliado,
       }}
     >
       {children}

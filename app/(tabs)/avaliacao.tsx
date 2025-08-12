@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
-import { Star, Tag, CircleCheck as CheckCircle, Circle as XCircle, Megaphone } from 'lucide-react-native';
+import { Star, Tag, CircleCheck as CheckCircle, Circle as XCircle, Megaphone, UserCheck, UserX } from 'lucide-react-native';
 import RatingModal from '@/components/RatingModal';
 import TagSelectionModal from '@/components/TagSelectionModal';
 import { useRouter } from 'expo-router';
@@ -11,16 +11,16 @@ import { useRouter } from 'expo-router';
 export default function AvaliacaoPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { convocacoes, aceitarConvocacao, recusarConvocacao, avaliarGoleiro, avaliarOrganizador, categorias } = useApp();
+  const { convocacoes, aceitarConvocacao, recusarConvocacao, avaliarGoleiro, avaliarOrganizador, categorias, confirmarPresenca } = useApp();
   const [avaliando, setAvaliando] = useState<string | null>(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [currentConvocacaoIdToRate, setCurrentConvocacaoIdToRate] = useState<string | null>(null);
   const [showTagSelectionModal, setShowTagSelectionModal] = useState(false);
   const [currentConvocacaoIdToTag, setCurrentConvocacaoIdToTag] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
 
   if (!user) return null;
 
-  // Filtra convocacoes do usuário, seja goleiro ou organizador
   const minhasConvocacoes = convocacoes.filter(c =>
     user.tipo_usuario === 'goleiro' ? c.goleiro_id === user.id : c.organizador_id === user.id
   );
@@ -65,6 +65,17 @@ export default function AvaliacaoPage() {
     }
   };
 
+  const handleConfirmarPresenca = async (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => {
+    setConfirmando(convocacaoId);
+    try {
+      await confirmarPresenca(convocacaoId, status);
+    } catch (error) {
+      console.error('Erro ao confirmar presença:', error);
+    } finally {
+      setConfirmando(null);
+    }
+  };
+
   const renderConvocacao = (convocacao: any) => {
     const dataInicio = new Date(convocacao.data_hora_inicio);
     const dataFim = new Date(convocacao.data_hora_fim);
@@ -75,10 +86,10 @@ export default function AvaliacaoPage() {
 
     const getStatusColor = (status: string) => {
       switch (status) {
-        case 'pendente': return '#D97706'; // amber600
-        case 'aceito': return '#10B981';   // emerald500
-        case 'recusado': return '#EF4444'; // red500
-        default: return '#6B7280';         // gray500
+        case 'pendente': return '#D97706';
+        case 'aceito': return '#10B981';
+        case 'recusado': return '#EF4444';
+        default: return '#6B7280';
       }
     };
 
@@ -130,32 +141,65 @@ export default function AvaliacaoPage() {
 
         {isPassado && convocacao.status === 'aceito' && (
           <View style={styles.avaliacaoSection}>
-            {user.tipo_usuario === 'organizador' && !jaAvaliouGoleiro && !jaAvaliouOrganizador && (
-              <TouchableOpacity
-                style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
-                onPress={() => handleAvaliarGoleiro(convocacao.id)}
-                disabled={avaliando === convocacao.id}
-                activeOpacity={0.8}
-              >
-                <Star size={16} color="#fff" />
-                <Text style={styles.buttonText}>
-                  {avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Goleiro'}
-                </Text>
-              </TouchableOpacity>
+            {/* Botão de confirmar presença para organizador */}
+            {user.tipo_usuario === 'organizador' && convocacao.presenca_status == null && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.button, styles.acceptButton, confirmando === convocacao.id && styles.buttonDisabled]}
+                  onPress={() => handleConfirmarPresenca(convocacao.id, 'compareceu')}
+                  disabled={confirmando === convocacao.id}
+                  activeOpacity={0.8}
+                >
+                  <UserCheck size={16} color="#fff" />
+                  <Text style={styles.buttonText}>
+                    {confirmando === convocacao.id ? 'Confirmando...' : 'Confirmar Presença'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.rejectButton, confirmando === convocacao.id && styles.buttonDisabled]}
+                  onPress={() => handleConfirmarPresenca(convocacao.id, 'nao_compareceu')}
+                  disabled={confirmando === convocacao.id}
+                  activeOpacity={0.8}
+                >
+                  <UserX size={16} color="#fff" />
+                  <Text style={styles.buttonText}>
+                    {confirmando === convocacao.id ? 'Marcando...' : 'Marcar Ausente'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
-            {user.tipo_usuario === 'goleiro' && !jaAvaliouOrganizador && (
-              <TouchableOpacity
-                style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
-                onPress={() => handleAvaliarOrganizador(convocacao.id)}
-                disabled={avaliando === convocacao.id}
-                activeOpacity={0.8}
-              >
-                <Tag size={16} color="#fff" />
-                <Text style={styles.buttonText}>
-                  {avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Organizador'}
-                </Text>
-              </TouchableOpacity>
+            {/* Avaliação só aparece se o goleiro compareceu */}
+            {convocacao.presenca_status === 'compareceu' && (
+              <>
+                {user.tipo_usuario === 'organizador' && !jaAvaliouGoleiro && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
+                    onPress={() => handleAvaliarGoleiro(convocacao.id)}
+                    disabled={avaliando === convocacao.id}
+                    activeOpacity={0.8}
+                  >
+                    <Star size={16} color="#fff" />
+                    <Text style={styles.buttonText}>
+                      {avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Goleiro'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {user.tipo_usuario === 'goleiro' && !jaAvaliouOrganizador && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
+                    onPress={() => handleAvaliarOrganizador(convocacao.id)}
+                    disabled={avaliando === convocacao.id}
+                    activeOpacity={0.8}
+                  >
+                    <Tag size={16} color="#fff" />
+                    <Text style={styles.buttonText}>
+                      {avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Organizador'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
 
             {jaAvaliouGoleiro && (
@@ -188,8 +232,6 @@ export default function AvaliacaoPage() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
-      {/* REMOVIDO o botão voltar */}
-
       <View style={styles.header}>
         <Megaphone size={24} color={colors.blue500} />
         <View style={{ marginLeft: 12 }}>
@@ -254,7 +296,6 @@ const colors = {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -262,18 +303,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 12,
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: colors.gray700,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: colors.gray500,
-    marginTop: 2,
-  },
-
+  headerTitle: { fontSize: 26, fontWeight: '700', color: colors.gray700 },
+  headerSubtitle: { fontSize: 15, fontWeight: '400', color: colors.gray500, marginTop: 2 },
   convocacaoCard: {
     backgroundColor: colors.white,
     borderRadius: 16,
@@ -286,112 +317,28 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  convocacaoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  convocacaoTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.gray700,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.white,
-    textTransform: 'uppercase',
-  },
-  convocacaoInfo: {
-    marginBottom: 14,
-    gap: 10,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  infoText: {
-    fontSize: 15,
-    color: colors.gray500,
-  },
-  valorText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.emerald500,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 14,
-    marginTop: 14,
-  },
+  convocacaoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  convocacaoTitle: { fontSize: 17, fontWeight: '600', color: colors.gray700 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, minWidth: 80, alignItems: 'center' },
+  statusText: { fontSize: 13, fontWeight: '600', color: colors.white, textTransform: 'uppercase' },
+  convocacaoInfo: { marginBottom: 14, gap: 10 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoText: { fontSize: 15, color: colors.gray500 },
+  valorText: { fontSize: 15, fontWeight: '600', color: colors.emerald500 },
+  actionButtons: { flexDirection: 'row', gap: 14, marginTop: 14 },
   button: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, borderRadius: 12
   },
-  acceptButton: {
-    backgroundColor: colors.emerald500,
-  },
-  rejectButton: {
-    backgroundColor: colors.red500,
-  },
-  avaliarButton: {
-    backgroundColor: colors.blue500,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-    backgroundColor: colors.gray400,
-  },
-  buttonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  avaliacaoSection: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray200,
-  },
-  avaliacaoInfo: {
-    backgroundColor: colors.gray50,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginTop: 6,
-  },
-  avaliacaoText: {
-    fontSize: 13,
-    color: colors.gray500,
-  },
-  pendingReviewText: {
-    fontSize: 13,
-    color: colors.gray500,
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: colors.gray500,
-    fontStyle: 'italic',
-  },
+  acceptButton: { backgroundColor: colors.emerald500 },
+  rejectButton: { backgroundColor: colors.red500 },
+  avaliarButton: { backgroundColor: colors.blue500 },
+  buttonDisabled: { opacity: 0.6, backgroundColor: colors.gray400 },
+  buttonText: { color: colors.white, fontSize: 15, fontWeight: '700' },
+  avaliacaoSection: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.gray200 },
+  avaliacaoInfo: { backgroundColor: colors.gray50, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, marginTop: 6 },
+  avaliacaoText: { fontSize: 13, color: colors.gray500 },
+  pendingReviewText: { fontSize: 13, color: colors.gray500, marginTop: 6, fontStyle: 'italic' },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 20 },
+  emptyText: { fontSize: 16, color: colors.gray500, fontStyle: 'italic' },
 });

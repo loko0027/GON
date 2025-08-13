@@ -1,0 +1,24 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export function useUserFrameworkReady() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    // Verifica sessão atual
+    const session = supabase.auth.session();
+    setReady(!!session);
+
+    // Escuta mudanças na autenticação
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setReady(!!session);
+    });
+
+    // Cleanup do listener
+    return () => {
+      listener?.unsubscribe();
+    };
+  }, []);
+
+  return ready;
+}

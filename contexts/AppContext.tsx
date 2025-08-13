@@ -512,7 +512,7 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_retido: novoSaldoRetidoOrganizador,
         }, { onConflict: 'usuario_id' });
 
-      Alert.alert('Sucesso', `Avaliação do goleiro enviada: ${nota} estrelas e ${coins_calculados} coins adicionados.`);
+      Alert.alert('Sucesso', `Avaliação do goleiro enviada.`);
       await loadConvocacoes();
       await loadSaldos();
 

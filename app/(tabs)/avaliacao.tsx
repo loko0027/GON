@@ -29,6 +29,9 @@ export default function AvaliacaoPage() {
   const [currentConvocacaoIdToTag, setCurrentConvocacaoIdToTag] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<string | null>(null);
 
+  // Labels definidos aqui (escopo da página) para evitar ReferenceError
+  const LABELS = ["Ruim", "Mais ou menos", "Bom", "Ótimo", "Paredão"];
+
   if (!user) return null;
 
   const minhasConvocacoes = convocacoes.filter(c =>
@@ -41,17 +44,32 @@ export default function AvaliacaoPage() {
   };
 
   const onRateGoleiro = async (nota: number) => {
-    if (currentConvocacaoIdToRate) {
-      setAvaliando(currentConvocacaoIdToRate);
-      try {
-        await avaliarGoleiro(currentConvocacaoIdToRate, nota);
-      } catch (error) {
-        console.error('Erro ao avaliar goleiro:', error);
-      } finally {
-        setAvaliando(null);
-        setShowRatingModal(false);
-        setCurrentConvocacaoIdToRate(null);
+    if (!currentConvocacaoIdToRate) return;
+    setAvaliando(currentConvocacaoIdToRate);
+
+    // label local garantido
+    const label = LABELS[nota - 1] ?? `${nota} estrelas`;
+
+    try {
+      await avaliarGoleiro(currentConvocacaoIdToRate, nota);
+
+      // mostra só o label (sem coins)
+      Alert.alert('Sucesso', `Avaliação do goleiro enviada: ${label}`);
+    } catch (error: any) {
+      console.error('Erro ao avaliar goleiro:', error);
+
+      // Tratamento específico para violação de unique constraint no banco
+      // Alguns drivers retornam objeto com .code, outros string; tratamos os dois casos
+      const sqlCode = error?.code ?? (typeof error === 'string' ? error : undefined);
+      if (sqlCode === '23505' || (error && error.message && error.message.includes('duplicate key'))) {
+        Alert.alert('Aviso', 'Você já avaliou esta convocação.');
+      } else {
+        Alert.alert('Erro', 'Não foi possível registrar a avaliação. Tente novamente mais tarde.');
       }
+    } finally {
+      setAvaliando(null);
+      setShowRatingModal(false);
+      setCurrentConvocacaoIdToRate(null);
     }
   };
 
@@ -67,6 +85,7 @@ export default function AvaliacaoPage() {
         await avaliarOrganizador(currentConvocacaoIdToTag, tagName);
       } catch (error) {
         console.error('Erro ao avaliar organizador:', error);
+        Alert.alert('Erro', 'Não foi possível registrar a avaliação do organizador.');
       } finally {
         setAvaliando(null);
         setShowTagSelectionModal(false);
@@ -81,6 +100,7 @@ export default function AvaliacaoPage() {
       await confirmarPresenca(convocacaoId, status);
     } catch (error) {
       console.error('Erro ao confirmar presença:', error);
+      Alert.alert('Erro', 'Não foi possível atualizar presença.');
     } finally {
       setConfirmando(null);
     }
@@ -91,7 +111,6 @@ export default function AvaliacaoPage() {
     const dataFim = new Date(convocacao.data_hora_fim);
     const isPassado = dataFim < new Date();
 
-    // Usando as novas funções do contexto
     const jaAvaliouGoleiro = isGoleiroAvaliado(convocacao.id);
     const jaAvaliouOrganizador = isOrganizadorAvaliado(convocacao.id);
 
@@ -267,11 +286,11 @@ export default function AvaliacaoPage() {
         title="Avaliar Goleiro"
         message="Escolha uma nota:"
         options={[
-          { nota: 1, coins: 25 },
-          { nota: 2, coins: 30 },
-          { nota: 3, coins: 35 },
-          { nota: 4, coins: 40 },
-          { nota: 5, coins: 45 },
+          { nota: 1 },
+          { nota: 2 },
+          { nota: 3 },
+          { nota: 4 },
+          { nota: 5 },
         ]}
       />
 

@@ -2,7 +2,36 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
-import { Settings, Plus, CreditCard as Edit3, ChartBar as BarChart3, Activity } from 'lucide-react-native';
+import { Settings, Plus, CreditCard as Edit3, ChartBar as BarChart3, Bell } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+
+// 🚀 função para enviar push via Expo API
+async function sendPushNotification(tokens: string[], title: string, body: string) {
+  try {
+    const messages = tokens.map(token => ({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data: { extra: 'dados se quiser' },
+    }));
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+
+    const result = await response.json();
+    console.log("Resultado Expo Push:", result);
+  } catch (error) {
+    console.error("Erro ao enviar push:", error);
+  }
+}
 
 export default function AdminTab() {
   const { user } = useAuth();
@@ -10,6 +39,9 @@ export default function AdminTab() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategory, setNewCategory] = useState({ nome: '', emoji: '', tipo: 'positiva' as 'positiva' | 'neutra' | 'negativa' });
+
+  // Notificações
+  const [notification, setNotification] = useState({ title: '', message: '' });
 
   if (user?.tipo_usuario !== 'admin') {
     return (
@@ -37,6 +69,41 @@ export default function AdminTab() {
     Alert.alert('Sucesso', 'Categoria adicionada com sucesso!');
     setShowAddCategory(false);
     setNewCategory({ nome: '', emoji: '', tipo: 'positiva' });
+  };
+
+  const handleSendNotification = async () => {
+    if (!notification.title || !notification.message) {
+      Alert.alert("Erro", "Preencha título e mensagem.");
+      return;
+    }
+
+    try {
+      // 🔎 Buscar tokens na tabela user_push_tokens apenas de usuários aprovados
+      const { data: tokensData, error } = await supabase
+        .from('user_push_tokens')
+        .select('expo_push_token')
+        .in('usuario', supabase
+            .from('usuarios')
+            .select('id')
+            .eq('status_aprovacao', 'aprovado')
+        );
+
+      if (error) throw error;
+
+      const tokens = tokensData.map(t => t.expo_push_token).filter(Boolean);
+      if (tokens.length === 0) {
+        Alert.alert("Aviso", "Nenhum usuário com token de notificação encontrado.");
+        return;
+      }
+
+      await sendPushNotification(tokens, notification.title, notification.message);
+
+      Alert.alert("Sucesso", "Notificação enviada para os usuários!");
+      setNotification({ title: '', message: '' });
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Erro", "Não foi possível enviar a notificação.");
+    }
   };
 
   const renderOverview = () => (
@@ -158,6 +225,34 @@ export default function AdminTab() {
     </View>
   );
 
+  const renderNotificacoes = () => (
+    <View style={styles.tabContent}>
+      <Text style={styles.sectionTitle}>🔔 Enviar Notificação</Text>
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Título</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex: Promoção especial!"
+          value={notification.title}
+          onChangeText={(text) => setNotification(prev => ({ ...prev, title: text }))}
+        />
+      </View>
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Mensagem</Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+          placeholder="Digite a mensagem da notificação..."
+          multiline
+          value={notification.message}
+          onChangeText={(text) => setNotification(prev => ({ ...prev, message: text }))}
+        />
+      </View>
+      <TouchableOpacity style={styles.confirmButton} onPress={handleSendNotification}>
+        <Text style={styles.confirmButtonText}>Enviar</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const getTipoColor = (tipo: string) => {
     switch (tipo) {
       case 'positiva': return '#dcfce7';
@@ -170,6 +265,7 @@ export default function AdminTab() {
   const tabs = [
     { id: 'overview', label: 'Visão Geral', icon: BarChart3 },
     { id: 'categorias', label: 'Categorias', icon: Settings },
+    { id: 'notificacoes', label: 'Notificações', icon: Bell },
   ];
 
   return (
@@ -180,7 +276,7 @@ export default function AdminTab() {
             <Settings size={28} color="#7c3aed" />
             <View>
               <Text style={styles.title}>Configurações</Text>
-              <Text style={styles.subtitle}>Gerenciar sistema e categorias</Text>
+              <Text style={styles.subtitle}>Gerenciar sistema, categorias e notificações</Text>
             </View>
           </View>
         </View>
@@ -204,274 +300,55 @@ export default function AdminTab() {
       <ScrollView style={styles.content}>
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'categorias' && renderCategorias()}
+        {activeTab === 'notificacoes' && renderNotificacoes()}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-  },
-  header: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#64748b',
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabButtonActive: {
-    borderBottomColor: '#7c3aed',
-  },
-  tabButtonText: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  tabButtonTextActive: {
-    color: '#7c3aed',
-    fontWeight: '700',
-  },
-  content: {
-    flex: 1,
-  },
-  tabContent: {
-    padding: 24,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  statCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    width: '47%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#7c3aed',
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    marginTop: 4,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  addButton: {
-    backgroundColor: '#7c3aed',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    shadowColor: '#7c3aed',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  addCategoryForm: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  inputGroup: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#374151',
-  },
-  tipoButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  tipoButton: {
-    flex: 1,
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-  },
-  tipoButtonActive: {
-    borderColor: '#10B981',
-    backgroundColor: '#ecfdf5',
-  },
-  tipoButtonText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  formActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  confirmButton: {
-    flex: 1,
-    backgroundColor: '#10B981',
-    padding: 8,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  confirmButtonText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  categoriasList: {
-    gap: 8,
-  },
-  categoriaCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  categoriaInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  categoriaEmoji: {
-    fontSize: 16,
-  },
-  categoriaNome: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  categoriaActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  tipoTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  tipoTagText: {
-    fontSize: 10,
-    color: '#6b7280',
-  },
-  editButton: {
-    padding: 4,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    textAlign: 'center',
-    marginTop: 50,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  errorText: { textAlign: 'center', marginTop: 20, fontSize: 16, color: 'red' },
+  header: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  headerContent: { flexDirection: 'row', alignItems: 'center' },
+  titleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#111' },
+  subtitle: { fontSize: 14, color: '#666' },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  tabButton: { flex: 1, padding: 12, alignItems: 'center' },
+  tabButtonActive: { borderBottomWidth: 2, borderBottomColor: '#7c3aed' },
+  tabButtonText: { fontSize: 14, color: '#64748b', marginTop: 4 },
+  tabButtonTextActive: { color: '#7c3aed', fontWeight: 'bold' },
+  content: { flex: 1 },
+  tabContent: { padding: 16 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  statCard: { width: '45%', backgroundColor: '#f9fafb', padding: 12, borderRadius: 8 },
+  statNumber: { fontSize: 18, fontWeight: 'bold', color: '#111' },
+  statLabel: { fontSize: 12, color: '#666' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#111' },
+  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#7c3aed', padding: 8, borderRadius: 6 },
+  addButtonText: { color: '#fff', marginLeft: 4 },
+  addCategoryForm: { backgroundColor: '#f9fafb', padding: 12, borderRadius: 8, marginBottom: 12 },
+  inputGroup: { marginBottom: 8 },
+  label: { fontSize: 12, fontWeight: '500', color: '#333' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 8, marginTop: 4 },
+  tipoButtons: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  tipoButton: { padding: 6, borderWidth: 1, borderColor: '#ddd', borderRadius: 6 },
+  tipoButtonActive: { backgroundColor: '#7c3aed22', borderColor: '#7c3aed' },
+  tipoButtonText: { fontSize: 12, color: '#111' },
+  formActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  cancelButton: { padding: 8, backgroundColor: '#f3f4f6', borderRadius: 6 },
+  cancelButtonText: { color: '#333' },
+  confirmButton: { padding: 10, backgroundColor: '#7c3aed', borderRadius: 6, alignItems: 'center' },
+  confirmButtonText: { color: '#fff', fontWeight: 'bold' },
+  categoriasList: { gap: 8 },
+  categoriaCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#eee' },
+  categoriaInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  categoriaEmoji: { fontSize: 18 },
+  categoriaNome: { fontSize: 14, fontWeight: '500' },
+  categoriaActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tipoTag: { paddingVertical: 2, paddingHorizontal: 6, borderRadius: 6 },
+  tipoTagText: { fontSize: 12, color: '#111' },
+  editButton: { padding: 4 },
 });

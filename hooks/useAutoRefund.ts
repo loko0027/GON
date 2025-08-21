@@ -7,64 +7,54 @@ export function useAutoRefund() {
 
   useEffect(() => {
     /**
-     * Orquestra os processos de estorno e liberação de fundos.
-     * Esta é a função principal que será executada em intervalos regulares.
+     * Processa estornos e liberações automáticas.
      */
-    const runRefundAndLiberationProcess = async () => {
+    const processRefundsAndReleases = async () => {
       console.log('[AUTO_REFUND] Iniciando rotina de estorno e liberação...');
-      
-      // 1. Processa convocações recusadas para estornar o valor retido
-      await checkForAutoRefunds();
-      
-      // 2. Processa convocações finalizadas para liberar os coins ao goleiro
-      await checkForAutoLiberations();
-      
-      console.log('[AUTO_REFUND] Rotina finalizada.');
-      
-      // 3. Recarrega os dados da aplicação para refletir as mudanças
+
+      await processEstornosRecusados();
+      await processLiberacoesAutomatica();
+
+      console.log('[AUTO_REFUND] Rotina concluída.');
       await loadData();
     };
 
     /**
-     * Verifica e processa convocações recusadas para estornar o valor retido
-     * para o saldo do organizador.
+     * Estornos de convocações recusadas
      */
-    const checkForAutoRefunds = async () => {
+    const processEstornosRecusados = async () => {
       try {
-        console.log('[AUTO_REFUND] Verificando convocações recusadas...');
+        console.log('[AUTO_REFUND] Verificando convocações recusadas pendentes...');
 
-        // Busca convocações com status 'recusado' que ainda não foram estornadas
-        const { data: convocacoesRecusadas, error } = await supabase
+        const { data: recusadas, error } = await supabase
           .from('convocacoes')
           .select('*')
           .eq('status', 'recusado')
-          .eq('estorno_solicitado', false)
-          .not('organizador_id', 'is', null);
+          .eq('estorno_solicitado', false);
 
         if (error) throw error;
-        if (convocacoesRecusadas.length === 0) {
-          console.log('[AUTO_REFUND] Nenhum estorno pendente de convocações recusadas.');
+        if (!recusadas || recusadas.length === 0) {
+          console.log('[AUTO_REFUND] Nenhum estorno pendente.');
           return;
         }
 
-        for (const convocacao of convocacoesRecusadas) {
-          console.log(`[AUTO_REFUND] Estornando coins para a convocação ${convocacao.id}`);
-          
-          // 1. Buscar o saldo atual do organizador
-          const { data: saldoData, error: saldoFetchError } = await supabase
+        for (const convocacao of recusadas) {
+          console.log(`[AUTO_REFUND] Estornando convocação ${convocacao.id} para organizador ${convocacao.organizador_id}`);
+
+          // 1️⃣ Buscar saldo do organizador
+          const { data: saldoOrg, error: saldoOrgError } = await supabase
             .from('saldos')
             .select('saldo_coins, saldo_retido')
             .eq('usuario_id', convocacao.organizador_id)
             .single();
 
-          if (saldoFetchError) throw saldoFetchError;
+          if (saldoOrgError) throw saldoOrgError;
 
-          // 2. Calcula o novo saldo e o saldo retido
-          const novoSaldoCoins = (saldoData.saldo_coins || 0) + convocacao.valor_retido;
-          const novoSaldoRetido = (saldoData.saldo_retido || 0) - convocacao.valor_retido;
+          const novoSaldoCoins = (saldoOrg?.saldo_coins || 0) + convocacao.valor_retido;
+          const novoSaldoRetido = (saldoOrg?.saldo_retido || 0) - convocacao.valor_retido;
 
-          // 3. Atualiza o saldo do organizador
-          const { error: saldoUpdateError } = await supabase
+          // 2️⃣ Atualizar saldo do organizador
+          const { error: updateSaldoError } = await supabase
             .from('saldos')
             .update({
               saldo_coins: novoSaldoCoins,
@@ -72,109 +62,109 @@ export function useAutoRefund() {
             })
             .eq('usuario_id', convocacao.organizador_id);
 
-          if (saldoUpdateError) throw saldoUpdateError;
-          
-          // 4. Marca a convocação como estorno solicitado para evitar reprocessamento
-          const { error: updateError } = await supabase
+          if (updateSaldoError) throw updateSaldoError;
+
+          // 3️⃣ Marcar estorno solicitado
+          const { error: updateConvError } = await supabase
             .from('convocacoes')
             .update({ estorno_solicitado: true })
             .eq('id', convocacao.id);
 
-          if (updateError) throw updateError;
-          
+          if (updateConvError) throw updateConvError;
+
           console.log(`[AUTO_REFUND] Estorno da convocação ${convocacao.id} concluído.`);
         }
-      } catch (error) {
-        console.error('[AUTO_REFUND] Erro ao processar estornos automáticos:', error);
+      } catch (err) {
+        console.error('[AUTO_REFUND] Erro ao processar estornos:', err);
       }
     };
-    
+
     /**
-     * Verifica e processa convocações finalizadas para liberar o valor
-     * retido para o saldo do goleiro.
+     * Liberações automáticas de coins para goleiro
      */
-    const checkForAutoLiberations = async () => {
+    const processLiberacoesAutomatica = async () => {
       try {
         console.log('[AUTO_REFUND] Verificando convocações para liberação automática...');
-        
-        // Define o ponto de corte: 24 horas após o fim da convocação
-        const cutOffTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-        // Busca convocações aceitas, com presença confirmada e que já terminaram
-        const { data: convocacoesParaLiberar, error } = await supabase
+        const corte = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: paraLiberar, error } = await supabase
           .from('convocacoes')
           .select('*')
           .eq('status', 'aceito')
           .eq('presenca_status', 'compareceu')
-          .eq('liberacao_automatica', false) // Somente as que ainda não foram liberadas
-          .lt('data_hora_fim', cutOffTime);
+          .eq('liberacao_automatica', false)
+          .lt('data_hora_fim', corte);
 
         if (error) throw error;
-        if (convocacoesParaLiberar.length === 0) {
+        if (!paraLiberar || paraLiberar.length === 0) {
           console.log('[AUTO_REFUND] Nenhuma liberação pendente.');
           return;
         }
-        
-        for (const convocacao of convocacoesParaLiberar) {
-          console.log(`[AUTO_REFUND] Liberando coins para convocação ${convocacao.id}`);
-          
-          // 1. Atualiza o saldo do organizador (diminui o retido)
-          const { data: saldoOrganizador, error: saldoOrgError } = await supabase
+
+        for (const c of paraLiberar) {
+          console.log(`[AUTO_REFUND] Liberando coins para goleiro ${c.goleiro_id}, convocação ${c.id}`);
+
+          // Atualiza saldo do organizador (retirando retido)
+          const { data: saldoOrg, error: saldoOrgError } = await supabase
             .from('saldos')
             .select('saldo_retido')
-            .eq('usuario_id', convocacao.organizador_id)
+            .eq('usuario_id', c.organizador_id)
             .single();
-
           if (saldoOrgError) throw saldoOrgError;
-          
-          const novoSaldoRetidoOrganizador = (saldoOrganizador?.saldo_retido || 0) - convocacao.valor_retido;
+
+          const novoRetido = (saldoOrg?.saldo_retido || 0) - c.valor_retido;
 
           await supabase
             .from('saldos')
-            .update({ saldo_retido: novoSaldoRetidoOrganizador })
-            .eq('usuario_id', convocacao.organizador_id);
+            .update({ saldo_retido: novoRetido })
+            .eq('usuario_id', c.organizador_id);
 
-          // 2. Atualiza o saldo do goleiro (adiciona os coins)
-          const { data: saldoGoleiro, error: saldoGolError } = await supabase
+          // Atualiza saldo do goleiro
+          const { data: saldoGol, error: saldoGolError } = await supabase
             .from('saldos')
             .select('saldo_coins')
-            .eq('usuario_id', convocacao.goleiro_id)
+            .eq('usuario_id', c.goleiro_id)
             .single();
-
           if (saldoGolError) throw saldoGolError;
 
-          const novoSaldoCoinsGoleiro = (saldoGoleiro?.saldo_coins || 0) + convocacao.valor_retido;
+          const novoSaldoGoleiro = (saldoGol?.saldo_coins || 0) + c.valor_retido;
 
           await supabase
             .from('saldos')
-            .upsert({
-              usuario_id: convocacao.goleiro_id,
-              saldo_coins: novoSaldoCoinsGoleiro
-            }, { onConflict: 'usuario_id' });
+            .upsert(
+              { usuario_id: c.goleiro_id, saldo_coins: novoSaldoGoleiro },
+              { onConflict: 'usuario_id' }
+            );
 
-          // 3. Marca a convocação como liberada para evitar reprocessamento
-          const { error: updateError } = await supabase
+          // Marca liberação automática
+          await supabase
             .from('convocacoes')
             .update({
               liberacao_automatica: true,
               data_liberacao_automatica: new Date().toISOString()
             })
-            .eq('id', convocacao.id);
+            .eq('id', c.id);
 
-          if (updateError) throw updateError;
-          
-          console.log(`[AUTO_REFUND] Liberação da convocação ${convocacao.id} concluída.`);
+          console.log(`[AUTO_REFUND] Liberação da convocação ${c.id} concluída.`);
         }
-      } catch (error) {
-        console.error('[AUTO_REFUND] Erro ao processar liberações automáticas:', error);
+      } catch (err) {
+        console.error('[AUTO_REFUND] Erro ao processar liberações automáticas:', err);
       }
     };
-    
-    // Configura o intervalo para rodar a cada 2 minutos
-    const interval = setInterval(runRefundAndLiberationProcess, 2 * 60 * 1000);
-    runRefundAndLiberationProcess(); // Executa imediatamente ao carregar o app
 
-    // Limpa o intervalo quando o componente é desmontado
-    return () => clearInterval(interval);
+    // ⏱ Intervalo duplo para estornos recusados
+    const timeout1 = setTimeout(processRefundsAndReleases, 30 * 1000); // 30s
+    const timeout2 = setTimeout(processRefundsAndReleases, 60 * 1000); // 60s
+    const intervalRegular = setInterval(processRefundsAndReleases, 2 * 60 * 1000); // a cada 2 min
+
+    // Executa imediatamente ao carregar
+    processRefundsAndReleases();
+
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+      clearInterval(intervalRegular);
+    };
   }, [loadData]);
 }

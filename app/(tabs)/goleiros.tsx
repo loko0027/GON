@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
-import { User, Star, Target, Plus, Filter, Search, Calendar } from 'lucide-react-native';
+import { User, Star, Target, Plus, Filter, Search, Calendar, Clock, MapPin, DollarSign } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function GoleirosTab() {
   const { user } = useAuth();
-  const { criarConvocacao, getSaldo } = useApp();
+  const { criarConvocacao, getSaldo, calcularTaxaConvocacao, calcularValorGoleiro, calcularTaxaApp } = useApp();
 
   const [goleiros, setGoleiros] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterByRating, setFilterByRating] = useState('');
   const [showConvocacaoForm, setShowConvocacaoForm] = useState(false);
@@ -23,48 +24,51 @@ export default function GoleirosTab() {
     local: ''
   });
 
-  // Estados para DateTimePicker
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showHoraInicioPicker, setShowHoraInicioPicker] = useState(false);
   const [showHoraFimPicker, setShowHoraFimPicker] = useState(false);
-
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedHoraInicio, setSelectedHoraInicio] = useState<Date | null>(null);
   const [selectedHoraFim, setSelectedHoraFim] = useState<Date | null>(null);
 
-  useEffect(() => {
-    async function fetchGoleiros() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('id, nome, nota_media, jogos_realizados, foto_url')
-        .eq('tipo_usuario', 'goleiro')
-        .eq('status_aprovacao', 'aprovado');
+  // ✅ NOVO ESTADO para cálculo em tempo real
+  const [valorCalculado, setValorCalculado] = useState<{
+    total: number;
+    valorGoleiro: number;
+    taxaApp: number;
+    taxaDia: number;
+    taxaHorario: number;
+  } | null>(null);
 
-      if (error) {
-        console.error('Erro ao buscar goleiros:', error);
-      } else {
-        const goleirosComTags = (data || []).map((g) => ({
-          ...g,
-          tags: g.jogos_realizados > 15 ? ['Veterano', 'Confiável'] : ['Promissor']
-        }));
-        setGoleiros(goleirosComTags);
-      }
-      setLoading(false);
+  const fetchGoleiros = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id, nome, nota_media, jogos_realizados, foto_url')
+      .eq('tipo_usuario', 'goleiro')
+      .eq('status_aprovacao', 'aprovado');
+
+    if (error) {
+      console.error('Erro ao buscar goleiros:', error);
+    } else {
+      const goleirosComTags = (data || []).map((g) => ({
+        ...g,
+        tags: g.jogos_realizados > 15 ? ['Veterano', 'Confiável'] : ['Promissor']
+      }));
+      setGoleiros(goleirosComTags);
     }
-
-    fetchGoleiros();
-  }, []);
-
-  // Função para calcular custo dinâmico baseado na nota média
-  const custoPorGoleiro = (nota?: number) => {
-    if (!nota) return 10;
-    if (nota < 3) return 10;
-    if (nota < 4) return 20;
-    return 30;
+    setLoading(false);
   };
 
-  const saldo = getSaldo(user?.id || '');
+  const refreshGoleiros = async () => {
+    setRefreshing(true);
+    await fetchGoleiros();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchGoleiros();
+  }, []);
 
   useEffect(() => {
     if (selectedDate) {
@@ -88,6 +92,78 @@ export default function GoleirosTab() {
       setConvocacaoData(prev => ({ ...prev, hora_fim: `${h}:${m}` }));
     }
   }, [selectedHoraFim]);
+
+  // ✅ NOVO: Calcular valor em tempo real quando dados mudarem
+  useEffect(() => {
+    if (selectedGoleiro && selectedDate && selectedHoraInicio) {
+      calcularValorEmTempoReal();
+    } else {
+      setValorCalculado(null);
+    }
+  }, [selectedGoleiro, selectedDate, selectedHoraInicio]);
+
+  const calcularValorEmTempoReal = () => {
+    if (!selectedGoleiro || !selectedDate || !selectedHoraInicio) return;
+
+    const dataHora = new Date(selectedDate);
+    dataHora.setHours(selectedHoraInicio.getHours());
+    dataHora.setMinutes(selectedHoraInicio.getMinutes());
+
+    // Determinar nível do goleiro
+    let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
+    if (selectedGoleiro.nota_media < 3) {
+      nivel = 'iniciante';
+    } else if (selectedGoleiro.nota_media < 4) {
+      nivel = 'intermediario';
+    } else {
+      nivel = 'veterano';
+    }
+
+    // Calcular componentes do valor
+    const valorGoleiro = calcularValorGoleiro(nivel, dataHora);
+    const taxaApp = calcularTaxaApp(0); // 5 coins fixos
+    const total = valorGoleiro + taxaApp;
+
+    // Calcular taxas adicionais para exibição
+    const diaSemana = dataHora.getDay();
+    const diasValorizados = [0, 1, 5, 6]; // dom, seg, sex, sab
+    const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
+
+    const hora = dataHora.getHours();
+    let taxaHorario = 0;
+    if (hora >= 9 && hora < 14) {
+      taxaHorario = 6;
+    }
+
+    setValorCalculado({
+      total,
+      valorGoleiro,
+      taxaApp,
+      taxaDia,
+      taxaHorario
+    });
+  };
+
+  const custoPorGoleiro = (nota?: number) => {
+    const dataHora = new Date();
+    let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
+    
+    if (!nota) {
+      return calcularTaxaConvocacao(nivel, dataHora);
+    }
+    
+    if (nota < 3) {
+      nivel = 'iniciante';
+    } else if (nota < 4) {
+      nivel = 'intermediario';
+    } else {
+      nivel = 'veterano';
+    }
+    
+    return calcularTaxaConvocacao(nivel, dataHora);
+  };
+
+  const saldo = getSaldo(user?.id || '');
 
   const filteredGoleiros = goleiros.filter((goleiro) => {
     const matchesSearch = goleiro.nome.toLowerCase().includes(searchQuery.toLowerCase());
@@ -116,28 +192,24 @@ export default function GoleirosTab() {
 
   const onChangeDate = (event: any, date?: Date) => {
     setShowDatePicker(false);
-    if (date) {
-      setSelectedDate(date);
-    }
+    if (date) setSelectedDate(date);
   };
 
   const onChangeHoraInicio = (event: any, date?: Date) => {
     setShowHoraInicioPicker(false);
-    if (date) {
-      setSelectedHoraInicio(date);
-    }
+    if (date) setSelectedHoraInicio(date);
   };
 
   const onChangeHoraFim = (event: any, date?: Date) => {
     setShowHoraFimPicker(false);
-    if (date) {
-      setSelectedHoraFim(date);
-    }
+    if (date) setSelectedHoraFim(date);
   };
 
   const handleSubmitConvocacao = () => {
+    if (!valorCalculado) return;
+
     const currentSaldo = getSaldo(user?.id || '');
-    const custo = custoPorGoleiro(selectedGoleiro?.nota_media);
+    const custo = valorCalculado.total;
 
     if (currentSaldo.saldo_coins < custo) {
       Alert.alert(
@@ -191,6 +263,7 @@ export default function GoleirosTab() {
     setSelectedDate(null);
     setSelectedHoraInicio(null);
     setSelectedHoraFim(null);
+    setValorCalculado(null);
   };
 
   if (user?.tipo_usuario !== 'organizador' && user?.tipo_usuario !== 'admin') {
@@ -210,7 +283,8 @@ export default function GoleirosTab() {
   }
 
   if (showConvocacaoForm && selectedGoleiro) {
-    const custo = custoPorGoleiro(selectedGoleiro.nota_media);
+    const custoEstimado = custoPorGoleiro(selectedGoleiro.nota_media);
+    const custoReal = valorCalculado?.total || custoEstimado;
 
     return (
       <View style={styles.container}>
@@ -222,12 +296,10 @@ export default function GoleirosTab() {
         </View>
 
         <ScrollView style={styles.form}>
-
-          {/* Data do Jogo */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Data do Jogo</Text>
             <TouchableOpacity
-              style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+              style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
               onPress={() => setShowDatePicker(true)}
             >
               <Text style={{ color: convocacaoData.data ? '#374151' : '#9ca3af', fontSize: 14 }}>
@@ -235,64 +307,37 @@ export default function GoleirosTab() {
               </Text>
               <Calendar size={20} color="#10B981" />
             </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                mode="date"
-                value={selectedDate || new Date()}
-                display="default"
-                onChange={onChangeDate}
-                minimumDate={new Date()}
-              />
-            )}
+            {showDatePicker && <DateTimePicker mode="date" value={selectedDate || new Date()} display="default" onChange={onChangeDate} minimumDate={new Date()} />}
           </View>
 
-          {/* Hora de Início */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Hora de Início</Text>
             <TouchableOpacity
-              style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+              style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
               onPress={() => setShowHoraInicioPicker(true)}
             >
               <Text style={{ color: convocacaoData.hora_inicio ? '#374151' : '#9ca3af', fontSize: 14 }}>
                 {convocacaoData.hora_inicio || 'Selecione a hora'}
               </Text>
-              <Star size={20} color="#10B981" />
+              <Clock size={20} color="#10B981" />
             </TouchableOpacity>
-            {showHoraInicioPicker && (
-              <DateTimePicker
-                mode="time"
-                value={selectedHoraInicio || new Date()}
-                display="spinner"
-                is24Hour={true}
-                onChange={onChangeHoraInicio}
-              />
-            )}
+            {showHoraInicioPicker && <DateTimePicker mode="time" value={selectedHoraInicio || new Date()} display="spinner" is24Hour={true} onChange={onChangeHoraInicio} />}
           </View>
 
-          {/* Hora de Fim */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Hora de Fim</Text>
             <TouchableOpacity
-              style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+              style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
               onPress={() => setShowHoraFimPicker(true)}
             >
               <Text style={{ color: convocacaoData.hora_fim ? '#374151' : '#9ca3af', fontSize: 14 }}>
                 {convocacaoData.hora_fim || 'Selecione a hora'}
               </Text>
-              <Star size={20} color="#10B981" />
+              <Clock size={20} color="#10B981" />
             </TouchableOpacity>
-            {showHoraFimPicker && (
-              <DateTimePicker
-                mode="time"
-                value={selectedHoraFim || new Date()}
-                display="spinner"
-                is24Hour={true}
-                onChange={onChangeHoraFim}
-              />
-            )}
+            {showHoraFimPicker && <DateTimePicker mode="time" value={selectedHoraFim || new Date()} display="spinner" is24Hour={true} onChange={onChangeHoraFim} />}
           </View>
 
-          {/* Local */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Local</Text>
             <TextInput
@@ -303,24 +348,67 @@ export default function GoleirosTab() {
             />
           </View>
 
+          {/* ✅ NOVA SEÇÃO: DETALHES DO VALOR CALCULADO */}
+          {valorCalculado && (
+            <View style={styles.valorDetalhado}>
+              <Text style={styles.valorTitulo}>💵 Detalhamento do Valor</Text>
+              
+              <View style={styles.valorItem}>
+                <Text style={styles.valorLabel}>Valor Base do Goleiro:</Text>
+                <Text style={styles.valorNumero}>{valorCalculado.valorGoleiro - valorCalculado.taxaDia - valorCalculado.taxaHorario} coins</Text>
+              </View>
+
+              {valorCalculado.taxaDia > 0 && (
+                <View style={styles.valorItem}>
+                  <Text style={styles.valorLabel}>➕ Taxa de Dia (Fim de Semana):</Text>
+                  <Text style={styles.valorNumero}>+{valorCalculado.taxaDia} coins</Text>
+                </View>
+              )}
+
+              {valorCalculado.taxaHorario > 0 && (
+                <View style={styles.valorItem}>
+                  <Text style={styles.valorLabel}>➕ Taxa de Horário (09h-14h):</Text>
+                  <Text style={styles.valorNumero}>+{valorCalculado.taxaHorario} coins</Text>
+                </View>
+              )}
+
+              <View style={styles.valorItem}>
+                <Text style={styles.valorLabel}>💎 Valor Total para o Goleiro:</Text>
+                <Text style={[styles.valorNumero, styles.valorGoleiro]}>
+                  {valorCalculado.valorGoleiro} coins
+                </Text>
+              </View>
+
+              <View style={styles.valorItem}>
+                <Text style={styles.valorLabel}>📱 Taxa Fixa do App:</Text>
+                <Text style={[styles.valorNumero, styles.taxaApp]}>
+                  +{valorCalculado.taxaApp} coins
+                </Text>
+              </View>
+
+              <View style={[styles.valorItem, styles.valorTotal]}>
+                <Text style={styles.valorLabel}>💰 VALOR TOTAL:</Text>
+                <Text style={[styles.valorNumero, styles.valorTotalNumero]}>
+                  {valorCalculado.total} coins
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.valorInfo}>
-            <Text style={styles.valorText}>💰 Valor: {custo} coins (será retido até o fim do jogo)</Text>
-            <Text style={styles.saldoText}>Seu saldo disponível: {saldo.saldo_coins} coins</Text>
-            {saldo.saldo_retido > 0 && (
-              <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>
-            )}
+            <Text style={styles.valorText}>💳 Seu saldo disponível: {saldo.saldo_coins} coins</Text>
+            {saldo.saldo_retido > 0 && <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>}
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.submitButton,
-              saldo.saldo_coins < custo && styles.disabledButton
-            ]}
+            style={[styles.submitButton, saldo.saldo_coins < custoReal && styles.disabledButton]}
             onPress={handleSubmitConvocacao}
-            disabled={saldo.saldo_coins < custo}
+            disabled={saldo.saldo_coins < custoReal || !valorCalculado}
           >
             <Text style={styles.submitButtonText}>
-              {saldo.saldo_coins < custo ? 'Saldo Insuficiente' : 'Confirmar Convocação'}
+              {!valorCalculado ? 'Calculando...' : 
+               saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : 
+               `Confirmar Convocação - ${custoReal} coins`}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -337,9 +425,7 @@ export default function GoleirosTab() {
 
       <View style={styles.saldoCard}>
         <Text style={styles.saldoText}>💰 Seu saldo disponível: {saldo.saldo_coins} coins</Text>
-        {saldo.saldo_retido > 0 && (
-          <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>
-        )}
+        {saldo.saldo_retido > 0 && <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>}
       </View>
 
       <View style={styles.filters}>
@@ -364,7 +450,17 @@ export default function GoleirosTab() {
         </View>
       </View>
 
-      <ScrollView style={styles.goleirosList}>
+      <ScrollView
+        style={styles.goleirosList}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshGoleiros}
+            tintColor="#10B981"
+            colors={['#10B981']}
+          />
+        }
+      >
         {filteredGoleiros.map((goleiro) => {
           const custo = custoPorGoleiro(goleiro.nota_media);
           const saldoInsuficiente = saldo.saldo_coins < custo;
@@ -374,11 +470,7 @@ export default function GoleirosTab() {
               <View style={styles.goleiroHeader}>
                 <View style={styles.goleiroInfo}>
                   <View style={styles.goleiroAvatar}>
-                    {goleiro.foto_url ? (
-                      <Image source={{ uri: goleiro.foto_url }} style={styles.avatarImage} />
-                    ) : (
-                      <User size={24} color="#10B981" />
-                    )}
+                    {goleiro.foto_url ? <Image source={{ uri: goleiro.foto_url }} style={styles.avatarImage} /> : <User size={24} color="#10B981" />}
                   </View>
                   <View>
                     <Text style={styles.goleiroNome}>{goleiro.nome}</Text>
@@ -396,16 +488,13 @@ export default function GoleirosTab() {
                 </View>
 
                 <TouchableOpacity
-                  style={[
-                    styles.convocarButton,
-                    saldoInsuficiente && styles.disabledButton
-                  ]}
+                  style={[styles.convocarButton, saldoInsuficiente && styles.disabledButton]}
                   onPress={() => handleConvocar(goleiro)}
                   disabled={saldoInsuficiente}
                 >
                   <Plus size={16} color="#fff" />
                   <Text style={styles.convocarText}>
-                    Convocar {saldoInsuficiente && `(${custo} coins)`}
+                    {saldoInsuficiente ? `${custo} coins` : 'Convocar'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -426,251 +515,59 @@ export default function GoleirosTab() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-  },
-  header: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#64748b',
-    letterSpacing: 0.3,
-  },
-  saldoCard: {
-    backgroundColor: '#fff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    alignItems: 'center',
-  },
-  saldoText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#10b981',
-  },
-  saldoRetido: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#f97316',
-  },
-  filters: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: 20,
-    marginBottom: 10,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    paddingHorizontal: 8,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    fontSize: 16,
-    color: '#334155',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-    width: 100,
-    paddingHorizontal: 8,
-  },
-  filterInput: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    fontSize: 16,
-    color: '#334155',
-  },
-  goleirosList: {
-    paddingHorizontal: 20,
-  },
-  goleiroCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  goleiroHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  goleiroInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  goleiroAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#d1fae5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  avatarImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-  },
-  goleiroNome: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  goleiroStats: {
-    flexDirection: 'row',
-    marginTop: 4,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  statText: {
-    marginLeft: 4,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  convocarButton: {
-    backgroundColor: '#10b981',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#a7f3d0',
-  },
-  convocarText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-    marginLeft: 8,
-  },
-  goleiroTags: {
-    flexDirection: 'row',
-    marginTop: 12,
-    flexWrap: 'wrap',
-  },
-  tag: {
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  tagText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#065f46',
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 10,
-    backgroundColor: '#fff',
-  },
-  formTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#10b981',
-  },
-  closeButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 28,
-    color: '#10b981',
-  },
-  form: {
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-  },
-  inputGroup: {
-    marginBottom: 18,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: '#334155',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  valorInfo: {
-    marginBottom: 20,
-  },
-  valorText: {
-    fontWeight: '700',
-    color: '#065f46',
-    fontSize: 16,
-  },
-  submitButton: {
-    backgroundColor: '#10b981',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  errorText: {
-    marginTop: 30,
-    textAlign: 'center',
-    color: 'red',
-    fontWeight: '700',
-    fontSize: 18,
-  },
+  container: { flex: 1, backgroundColor: '#f1f5f9' },
+  header: { paddingVertical: 24, paddingHorizontal: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  title: { fontSize: 28, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
+  subtitle: { fontSize: 15, color: '#64748b', fontWeight: '500' },
+  saldoCard: { backgroundColor: '#10B981', padding: 12, margin: 12, borderRadius: 12 },
+  saldoText: { color: '#000', fontWeight: '600', fontSize: 14 },
+  saldoRetido: { color: '#d1fae5', fontWeight: '500', fontSize: 12, marginTop: 2 },
+  filters: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 12, justifyContent: 'space-between' },
+  searchContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', flex: 1, marginRight: 6 },
+  searchInput: { marginLeft: 6, flex: 1, height: 36 },
+  filterContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', flex: 1, marginLeft: 6 },
+  filterInput: { marginLeft: 6, flex: 1, height: 36 },
+  goleirosList: { paddingHorizontal: 12, marginBottom: 12 },
+  goleiroCard: { backgroundColor: '#fff', padding: 12, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  goleiroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  goleiroInfo: { flexDirection: 'row', alignItems: 'center' },
+  goleiroAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#e5e7eb', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarImage: { width: 48, height: 48, borderRadius: 24 },
+  goleiroNome: { fontWeight: '700', fontSize: 16, color: '#0f172a' },
+  goleiroStats: { flexDirection: 'row', marginTop: 4 },
+  statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
+  statText: { fontSize: 12, marginLeft: 4, color: '#6b7280' },
+  convocarButton: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
+  convocarText: { color: '#fff', fontWeight: '600', marginLeft: 4, fontSize: 12 },
+  disabledButton: { backgroundColor: '#94a3b8' },
+  goleiroTags: { flexDirection: 'row', marginTop: 8, flexWrap: 'wrap' },
+  tag: { backgroundColor: '#d1fae5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 4, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
+  tagText: { fontSize: 10, color: '#065f46', fontWeight: '500' },
+  priceTag: { backgroundColor: '#10B981', flexDirection: 'row', alignItems: 'center' },
+  priceText: { color: '#fff', marginLeft: 2 },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#f1f5f9' },
+  formTitle: { fontWeight: '700', fontSize: 18, color: '#0f172a' },
+  closeButton: { padding: 6 },
+  closeButtonText: { fontSize: 18, fontWeight: '700', color: '#ef4444' },
+  form: { paddingHorizontal: 12 },
+  inputGroup: { marginBottom: 12 },
+  label: { fontWeight: '500', color: '#0f172a', marginBottom: 4 },
+  input: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', fontSize: 14 },
+  
+  // ✅ NOVOS ESTILOS para detalhamento do valor
+  valorDetalhado: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, marginVertical: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  valorTitulo: { fontWeight: '700', color: '#0f172a', marginBottom: 8, fontSize: 16 },
+  valorItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  valorLabel: { color: '#64748b', fontSize: 12 },
+  valorNumero: { fontWeight: '600', color: '#0f172a', fontSize: 12 },
+  valorGoleiro: { color: '#10B981', fontWeight: '700' },
+  taxaApp: { color: '#ef4444' },
+  valorTotal: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 6, marginTop: 4 },
+  valorTotalNumero: { color: '#10B981', fontWeight: '700', fontSize: 14 },
+  
+  valorInfo: { marginVertical: 12 },
+  valorText: { fontWeight: '600', color: '#0f172a', marginBottom: 2 },
+  submitButton: { backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  submitButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  errorText: { color: '#ef4444', fontSize: 16, textAlign: 'center', marginTop: 24 }
 });

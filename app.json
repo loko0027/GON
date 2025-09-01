@@ -8,9 +8,20 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
+    "notification": {
+      "icon": "./assets/images/Sino.png",
+      "color": "#FF0000",
+      "iosDisplayInForeground": true,
+      "androidMode": "default"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pablossrs.boltexponativewind"
+      "bundleIdentifier": "com.pablossrs.boltexponativewind",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "package": "com.pablossrs.boltexponativewind",
@@ -22,7 +33,11 @@
         "READ_EXTERNAL_STORAGE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/goleiroon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -37,19 +52,40 @@
         "expo-notifications",
         {
           "icon": "./assets/images/Sino.png",
-          "color": "#FF0000"
+          "color": "#FF0000",
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "tsconfigPaths": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "97e01803-b2d1-47cb-b054-26e6c7e0df9e"
+        "projectId": "bb3a16e9-5710-4d8c-a0e7-a1950d277412"
       }
     },
-    "owner": "pablossrs"
+    "updates": {},
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "golirononv12"
   }
 }

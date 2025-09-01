@@ -3,40 +3,93 @@ import { supabase } from '@/lib/supabase';
 
 export function useRealtimeUpdates(loadDataFunction: () => Promise<void>) {
   useEffect(() => {
-    console.log('[REALTIME] Configurando subscription única...');
+    console.log('[REALTIME] Configurando subscriptions...');
 
-    const channel = supabase.channel('realtime_global');
-
-    const tables = [
-      'convocacoes',
-      'saldos',
-      'avaliacoes_goleiro',
-      'avaliacoes_organizador',
-      'presencas',
-      'usuarios',
-    ];
-
-    tables.forEach((table) => {
-      channel.on(
+    // Subscription para convocações
+    const convocacoesSubscription = supabase
+      .channel('convocacoes_realtime')
+      .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table },
+        { event: '*', schema: 'public', table: 'convocacoes' },
         (payload) => {
-          const timestamp = new Date().toLocaleTimeString();
-          console.log(`[${timestamp}] [REALTIME] Tabela: ${table}`);
-          console.log(`Evento: ${payload.eventType}`);
-          console.log('Dados da linha:', payload.new || payload.old);
+          console.log('[REALTIME] Mudança em convocações:', payload);
           loadDataFunction();
         }
-      );
-    });
+      )
+      .subscribe();
 
-    channel.subscribe()
-      .then(() => console.log('[REALTIME] Subscription ativa no canal global'))
-      .catch((err) => console.error('[REALTIME] Erro ao ativar subscription:', err));
+    // Subscription para saldos
+    const saldosSubscription = supabase
+      .channel('saldos_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'saldos' },
+        (payload) => {
+          console.log('[REALTIME] Mudança em saldos:', payload);
+          loadDataFunction();
+        }
+      )
+      .subscribe();
+
+    // Subscription para avaliações
+    const avaliacoesGoleiroSubscription = supabase
+      .channel('avaliacoes_goleiro_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'avaliacoes_goleiro' },
+        (payload) => {
+          console.log('[REALTIME] Mudança em avaliações de goleiro:', payload);
+          loadDataFunction();
+        }
+      )
+      .subscribe();
+
+    const avaliacoesOrganizadorSubscription = supabase
+      .channel('avaliacoes_organizador_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'avaliacoes_organizador' },
+        (payload) => {
+          console.log('[REALTIME] Mudança em avaliações de organizador:', payload);
+          loadDataFunction();
+        }
+      )
+      .subscribe();
+
+    // Subscription para presenças
+    const presencasSubscription = supabase
+      .channel('presencas_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'presencas' },
+        (payload) => {
+          console.log('[REALTIME] Mudança em presenças:', payload);
+          loadDataFunction();
+        }
+      )
+      .subscribe();
+
+    // Subscription para usuários (aprovações)
+    const usuariosSubscription = supabase
+      .channel('usuarios_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'usuarios' },
+        (payload) => {
+          console.log('[REALTIME] Mudança em usuários:', payload);
+          loadDataFunction();
+        }
+      )
+      .subscribe();
 
     return () => {
-      console.log('[REALTIME] Removendo subscription global...');
-      supabase.removeChannel(channel);
+      console.log('[REALTIME] Removendo subscriptions...');
+      supabase.removeChannel(convocacoesSubscription);
+      supabase.removeChannel(saldosSubscription);
+      supabase.removeChannel(avaliacoesGoleiroSubscription);
+      supabase.removeChannel(avaliacoesOrganizadorSubscription);
+      supabase.removeChannel(presencasSubscription);
+      supabase.removeChannel(usuariosSubscription);
     };
   }, [loadDataFunction]);
 }

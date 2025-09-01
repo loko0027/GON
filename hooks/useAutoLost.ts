@@ -6,33 +6,43 @@ export function useAutoLost(loadDataFunction: () => Promise<void>) {
     const checkLostConvocations = async () => {
       try {
         console.log('[AUTO_LOST] Verificando convocações perdidas...');
-
-        // Chama a RPC
+        
         const { data, error } = await supabase.rpc('verificar_convocacoes_perdidas');
-
+        
         if (error) {
           console.error('[AUTO_LOST] Erro ao verificar convocações perdidas:', error);
           return;
         }
 
         if (data && data.length > 0) {
-          console.log(`[AUTO_LOST] Convocações perdidas processadas: ${data.length}`);
-          data.forEach((item: any) => console.log(`[AUTO_LOST] ID processada: ${item.id}`));
-
-          // Recarrega os dados no app
-          await loadDataFunction();
+          const processadas = data.filter((item: any) => item.processada);
+          const comErro = data.filter((item: any) => !item.processada);
+          
+          console.log(`[AUTO_LOST] Convocações perdidas processadas: ${processadas.length}`);
+          
+          if (comErro.length > 0) {
+            console.error('[AUTO_LOST] Convocações com erro:', comErro);
+          }
+          
+          // Recarregar dados se houve processamentos
+          if (processadas.length > 0) {
+            console.log('[AUTO_LOST] Recarregando dados após marcar convocações perdidas...');
+            await loadDataFunction();
+          }
         }
       } catch (error) {
         console.error('[AUTO_LOST] Erro inesperado:', error);
       }
     };
 
-    // Verifica a cada 1 minuto
-    const interval = setInterval(checkLostConvocations, 60 * 1000);
-
-    // Executa imediatamente ao montar
+    // Verificar a cada 1 minuto para ser mais responsivo
+    const interval = setInterval(checkLostConvocations, 1 * 60 * 1000);
+    
+    // Verificar imediatamente
     checkLostConvocations();
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, [loadDataFunction]);
 }

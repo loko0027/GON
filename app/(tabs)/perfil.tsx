@@ -7,6 +7,7 @@ export default function PerfilTab() {
   const { user, logout, updateUser } = useAuth();
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalExcluirVisible, setModalExcluirVisible] = useState(false);
   const [nome, setNome] = useState(user?.nome || '');
   const [telefone, setTelefone] = useState(user?.telefone || '');
 
@@ -101,7 +102,7 @@ export default function PerfilTab() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>GoleiroON  v1.0 - Conectando o futebol amador</Text>
+          <Text style={styles.footerText}>GoleiroON v2.0 - Conectando o futebol amador</Text>
         </View>
       </ScrollView>
 
@@ -144,11 +145,27 @@ export default function PerfilTab() {
           <Button title="Salvar" onPress={salvarPerfil} />
 
           <View style={{ marginTop: 10 }}>
-            <Button
-              title="Cancelar"
-              onPress={() => setModalVisible(false)}
-              color="#ef4444"
-            />
+            <Button title="Cancelar" onPress={() => setModalVisible(false)} color="#ef4444" />
+          </View>
+
+          {/* Botão Deletar Conta */}
+          <View style={{ marginTop: 20 }}>
+            <Button title="Deletar Conta" color="#ef4444" onPress={() => setModalExcluirVisible(true)} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de confirmação de exclusão */}
+      <Modal visible={modalExcluirVisible} animationType="fade" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 300, backgroundColor: '#fff', borderRadius: 12, padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 16 }}>
+              Tem certeza que deseja excluir sua conta?
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+              <Button title="Não" onPress={() => setModalExcluirVisible(false)} />
+              <Button title="Sim, desejo excluir" color="#ef4444" onPress={() => setModalExcluirVisible(false)} />
+            </View>
           </View>
         </View>
       </Modal>

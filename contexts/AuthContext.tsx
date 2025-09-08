@@ -1,86 +1,89 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
-import { User } from '@/types';
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+// context/AuthContext.tsx
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import { Session } from "@supabase/supabase-js";
+import { User } from "@/types";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Função para registrar token de push na tabela user_push_tokens
-async function registerPushToken(userId: string) {
-  if (!userId) return;
-
+// ===== Funções de Push Token =====
+async function getPushToken(): Promise<string | null> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
-  if (existingStatus !== 'granted') {
+  if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
 
-  if (finalStatus !== 'granted') {
-    console.log('Permissão de notificação negada');
-    return;
+  if (finalStatus !== "granted") {
+    console.log("[PUSH] Permissão de notificação negada");
+    return null;
   }
-
-  let token: string | undefined;
 
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: '97e01803-b2d1-47cb-b054-26e6c7e0df9e',
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
     });
-    token = tokenData.data;
-    console.log('[PUSH] Token obtido:', token);
+    const token = tokenData.data;
+    console.log("[PUSH] Token obtido:", token);
+    return token;
   } catch (error) {
-    console.error('[PUSH] Erro ao obter token:', error);
-    return;
+    console.error("[PUSH] Erro ao obter token:", error);
+    return null;
   }
+}
 
-  if (!token) {
-    console.warn('[PUSH] Token está vazio');
-    return;
-  }
+async function saveTokenLocally(token: string) {
+  await AsyncStorage.setItem("@push_token", token);
+}
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+async function getTokenLocal(): Promise<string | null> {
+  return await AsyncStorage.getItem("@push_token");
+}
+
+async function associateTokenToUser(userId: string) {
+  const token = await getTokenLocal();
+  if (!token) return;
+
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "default",
       importance: Notifications.AndroidImportance.MAX,
     });
   }
 
-  // Verifica se o token já existe para este usuário
-  const { data: existingToken, error: fetchError } = await supabase
-    .from('user_push_tokens')
-    .select('*')
-    .eq('usuario', userId)
-    .eq('expo_push_token', token)
-    .single();
-
-  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
-    console.error('[PUSH] Erro ao buscar token no banco:', fetchError);
-    return;
-  }
-
-  if (existingToken) {
-    console.log('[PUSH] Token já está cadastrado.');
-    return;
-  }
-
-  // Insere ou atualiza o token na tabela user_push_tokens
-  const { error: insertError } = await supabase
-    .from('user_push_tokens')
-    .upsert({
+  const { error } = await supabase.from("user_push_tokens").upsert(
+    {
       usuario: userId,
       expo_push_token: token,
       plataforma: Platform.OS,
-    }, { onConflict: ['usuario', 'expo_push_token'] });
+    },
+    { onConflict: ["usuario", "plataforma"] }
+  );
 
-  if (insertError) {
-    console.error('[PUSH] Erro ao salvar token no banco:', insertError);
-  } else {
-    console.log('[PUSH] Token salvo na tabela user_push_tokens com sucesso!');
-  }
+  if (error) console.error("[PUSH] Erro ao salvar token no Supabase:", error);
+  else console.log("[PUSH] Token associado ao usuário com sucesso!");
 }
 
+// Hook que registra token automaticamente
+export function usePushToken(userId?: string) {
+  useEffect(() => {
+    (async () => {
+      const token = await getPushToken();
+      if (token) {
+        await saveTokenLocally(token);
+        if (userId) {
+          await associateTokenToUser(userId);
+        }
+      }
+    })();
+  }, [userId]);
+}
+
+// ===== Auth Context =====
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -91,17 +94,19 @@ interface AuthContextType {
     password: string,
     nome: string,
     telefone: string,
-    tipo_usuario: 'goleiro' | 'organizador'
+    tipo_usuario: "goleiro" | "organizador"
   ) => Promise<void>;
   logout: () => Promise<void>;
   updateUser?: (updates: Partial<User>) => Promise<void>;
+  adicionarCoins: (valor: number, descricao: string) => Promise<void>;
+  removerCoins: (valor: number, descricao: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }
 
@@ -114,47 +119,107 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ===== Funções do usuário =====
   const loadUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('id', userId)
+        .from("usuarios")
+        .select("*")
+        .eq("id", userId)
         .single();
 
       if (error) throw error;
 
       if (data) {
         const userProfile: User = {
-          ...data,
+          id: data.id,
+          nome: data.nome,
+          email: data.email,
+          telefone: data.telefone,
+          tipo_usuario: data.tipo_usuario,
+          status_aprovacao: data.status_aprovacao,
           data_cadastro: new Date(data.data_cadastro),
+          coins: data.coins || 0,
+          limite_convocacoes: data.limite_convocacoes || 2,
+          foto_url: data.foto_url,
+          nota_media: data.nota_media,
+          jogos_realizados: data.jogos_realizados,
         };
         setUser(userProfile);
         return userProfile;
       }
     } catch (error) {
-      console.error('[AUTH] Erro ao carregar perfil:', error);
+      console.error("[AUTH] Erro ao carregar perfil:", error);
       setUser(null);
       return null;
     }
   };
 
+  const adicionarCoins = async (valor: number, descricao: string) => {
+    if (!user) throw new Error("Usuário não autenticado");
+    try {
+      const { error: updateError } = await supabase
+        .from("usuarios")
+        .update({ coins: (user.coins || 0) + valor })
+        .eq("id", user.id);
+
+      if (updateError) throw updateError;
+
+      await supabase.from("transacoes_coins").insert({
+        usuario_id: user.id,
+        tipo: "credito",
+        valor,
+        descricao,
+        data: new Date().toISOString(),
+      });
+
+      setUser({ ...user, coins: (user.coins || 0) + valor });
+    } catch (error) {
+      console.error("Erro ao adicionar coins:", error);
+      throw error;
+    }
+  };
+
+  const removerCoins = async (valor: number, descricao: string) => {
+    if (!user) throw new Error("Usuário não autenticado");
+    if ((user.coins || 0) < valor) throw new Error("Saldo insuficiente");
+
+    try {
+      const { error: updateError } = await supabase
+        .from("usuarios")
+        .update({ coins: (user.coins || 0) - valor })
+        .eq("id", user.id);
+
+      if (updateError) throw updateError;
+
+      await supabase.from("transacoes_coins").insert({
+        usuario_id: user.id,
+        tipo: "debito",
+        valor,
+        descricao,
+        data: new Date().toISOString(),
+      });
+
+      setUser({ ...user, coins: (user.coins || 0) - valor });
+    } catch (error) {
+      console.error("Erro ao remover coins:", error);
+      throw error;
+    }
+  };
+
+  // ===== Inicialização =====
   useEffect(() => {
     const initialize = async () => {
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession();
-
-      if (error) console.error('[AUTH] Erro ao obter sessão inicial:', error);
-
+      if (error) console.error("[AUTH] Erro ao obter sessão inicial:", error);
       setSession(session);
 
       if (session?.user) {
-        const userProfile = await loadUserProfile(session.user.id);
-        if (userProfile) {
-          await registerPushToken(session.user.id);
-        }
+        await loadUserProfile(session.user.id);
+        await associateTokenToUser(session.user.id); // ⚡ token registrado aqui
       } else {
         setUser(null);
       }
@@ -168,7 +233,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setSession(session);
         if (session?.user) {
           await loadUserProfile(session.user.id);
-          await registerPushToken(session.user.id);
+          await associateTokenToUser(session.user.id); // ⚡ token atualizado aqui
         } else {
           setUser(null);
         }
@@ -176,85 +241,74 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     );
 
-    return () => {
-      listener?.subscription.unsubscribe();
-    };
+    return () => listener?.subscription.unsubscribe();
   }, []);
 
+  // ===== Login =====
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
-
       if (error) throw error;
 
       if (data.user) {
         const userProfile = await loadUserProfile(data.user.id);
-        if (!userProfile) throw new Error('Perfil não encontrado');
-
-        if (userProfile.status_aprovacao === 'rejeitado') {
+        if (!userProfile) throw new Error("Perfil não encontrado");
+        if (userProfile.status_aprovacao === "rejeitado") {
           await supabase.auth.signOut();
-          throw new Error('Sua conta foi rejeitada.');
+          throw new Error("Sua conta foi rejeitada.");
         }
-
-        await registerPushToken(data.user.id);
+        await associateTokenToUser(data.user.id);
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // ===== Registro =====
   const register = async (
     email: string,
     password: string,
     nome: string,
     telefone: string,
-    tipo_usuario: 'goleiro' | 'organizador'
+    tipo_usuario: "goleiro" | "organizador"
   ) => {
     try {
       setLoading(true);
-
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
-          data: {
-            nome,
-            telefone,
-            tipo_usuario,
-            status_aprovacao: 'pendente',
-          },
+          data: { nome, telefone, tipo_usuario, status_aprovacao: "pendente" },
         },
       });
-
       if (error) throw error;
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('usuarios')
-          .insert({
-            id: data.user.id,
-            nome,
-            email: email.trim().toLowerCase(),
-            telefone,
-            tipo_usuario,
-            status_aprovacao: 'pendente',
-            data_cadastro: new Date().toISOString(),
-          });
-
+        const { error: profileError } = await supabase.from("usuarios").insert({
+          id: data.user.id,
+          nome,
+          email: email.trim().toLowerCase(),
+          telefone,
+          tipo_usuario,
+          status_aprovacao: "pendente",
+          data_cadastro: new Date().toISOString(),
+          coins: 0,
+          limite_convocacoes: 2,
+        });
         if (profileError) throw profileError;
 
-        await registerPushToken(data.user.id);
+        await associateTokenToUser(data.user.id); // ⚡ token registrado aqui
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // ===== Logout =====
   const logout = async () => {
     setLoading(true);
     try {
@@ -266,22 +320,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // ===== Update user =====
   const updateUser = async (updates: Partial<User>) => {
-    if (!user) throw new Error('Usuário não autenticado');
+    if (!user) throw new Error("Usuário não autenticado");
     setLoading(true);
     try {
       const { error } = await supabase
-        .from('usuarios')
+        .from("usuarios")
         .update(updates)
-        .eq('id', user.id);
-
+        .eq("id", user.id);
       if (error) throw error;
-
       await loadUserProfile(user.id);
     } finally {
       setLoading(false);
     }
   };
+
+  // Hook de push token integrado ao user logado
+  usePushToken(session?.user?.id);
 
   return (
     <AuthContext.Provider
@@ -293,6 +349,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         register,
         logout,
         updateUser,
+        adicionarCoins,
+        removerCoins,
       }}
     >
       {children}

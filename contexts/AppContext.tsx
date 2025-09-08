@@ -134,7 +134,6 @@ export function AppProvider({ children }: AppProviderProps) {
     nivelJogador: 'iniciante' | 'intermediario' | 'veterano', 
     dataHora: Date
   ): number => {
-    // VALOR BASE POR NÍVEL (vai pro goleiro)
     let valorBaseGoleiro = 0;
     switch (nivelJogador) {
       case 'iniciante':
@@ -148,12 +147,10 @@ export function AppProvider({ children }: AppProviderProps) {
         break;
     }
 
-    // TAXA DE DIA (seg, sex, sab, dom) - VAI pro goleiro
     const diaSemana = dataHora.getDay();
-    const diasValorizados = [0, 1, 5, 6]; // dom, seg, sex, sab
+    const diasValorizados = [0, 1, 5, 6];
     const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
 
-    // TAXA DE HORÁRIO (09:00 às 14:00) - VAI pro goleiro
     const hora = dataHora.getHours();
     let taxaHorario = 0;
     if (hora >= 9 && hora < 14) {
@@ -169,7 +166,7 @@ export function AppProvider({ children }: AppProviderProps) {
     dataHora: Date
   ): number => {
     const valorGoleiro = calcularValorGoleiro(nivelJogador, dataHora);
-    const taxaApp = calcularTaxaApp(0); // 5 coins fixos
+    const taxaApp = calcularTaxaApp(0);
     
     return valorGoleiro + taxaApp;
   }, [calcularValorGoleiro, calcularTaxaApp]);
@@ -205,7 +202,6 @@ export function AppProvider({ children }: AppProviderProps) {
       setConvocacoes(convocacoesFormatadas);
       return convocacoesFormatadas;
     } catch (e) {
-      console.error("Erro ao carregar convocações:", e);
       Alert.alert("Erro", "Não foi possível carregar as convocações.");
       setConvocacoes([]);
       return [];
@@ -218,7 +214,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setSaldos(data || []);
     } catch (e) {
-      console.error("Erro ao carregar saldos:", e);
       setSaldos([]);
     }
   }, []);
@@ -229,7 +224,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setCategorias(data || []);
     } catch (e) {
-      console.error("Erro ao carregar categorias:", e);
       setCategorias([]);
     }
   }, []);
@@ -242,7 +236,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setRecargas(data || []);
     } catch (e) {
-      console.error("Erro ao carregar recargas:", e);
       setRecargas([]);
     }
   }, []);
@@ -255,7 +248,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setSaques(data || []);
     } catch (e) {
-      console.error("Erro ao carregar saques:", e);
       setSaques([]);
     }
   }, []);
@@ -271,7 +263,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setChamadosSuporte(data || []);
     } catch (e) {
-      console.error("Erro ao carregar chamados:", e);
       setChamadosSuporte([]);
     }
   }, []);
@@ -287,7 +278,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setMensagensSuporte(data || []);
     } catch (e) {
-      console.error("Erro ao carregar mensagens:", e);
       setMensagensSuporte([]);
     }
   }, []);
@@ -301,7 +291,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
       setAllAppUsers(data || []);
     } catch (e) {
-      console.error("Erro ao carregar usuários:", e);
       setAllAppUsers([]);
     }
   }, []);
@@ -321,7 +310,7 @@ export function AppProvider({ children }: AppProviderProps) {
         return exists ? prev.map(u => u.id === userId ? { ...u, ...data } : u) : [...prev, data];
       });
     } catch (e) {
-      console.error("Erro ao carregar dados do usuário:", e);
+      // Silencioso
     }
   }, []);
 
@@ -346,7 +335,7 @@ export function AppProvider({ children }: AppProviderProps) {
         dataClearedForNullUserRef.current = false;
       }
     } catch (error) {
-      console.error('Erro ao carregar dados do app:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os dados');
     } finally {
       setLoading(false);
     }
@@ -368,7 +357,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       await loadData();
     } catch (error) {
-      console.error('Erro ao atualizar dados:', error);
       Alert.alert('Erro', 'Não foi possível atualizar os dados');
     } finally {
       setRefreshing(false);
@@ -399,7 +387,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }
 
     if (dataLoadedForUserRef.current !== user.id) {
-      loadData().catch(console.error);
+      loadData().catch(() => {});
     }
   }, [user, authLoading, loadData, clearAllAppDataStates]);
 
@@ -426,6 +414,7 @@ export function AppProvider({ children }: AppProviderProps) {
     return allAppUsers.filter(u => u.status_aprovacao === 'pendente');
   }, [allAppUsers]);
 
+  // ✅ FUNÇÕES CORRIGIDAS PARA APROVAR/REJEITAR USUÁRIOS
   const aprovarUsuario = useCallback(async (userId: string): Promise<void> => {
     try {
       const { error } = await supabase
@@ -439,10 +428,10 @@ export function AppProvider({ children }: AppProviderProps) {
         message: 'Sua conta foi aprovada! Agora você pode usar todos os recursos do app.'
       });
 
+      // ✅ ATUALIZA A LISTA DE USUÁRIOS APÓS A MUDANÇA
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário aprovado com sucesso!');
     } catch (e) {
-      console.error("Erro ao aprovar usuário:", e);
       Alert.alert('Erro', 'Não foi possível aprovar o usuário.');
     }
   }, [loadAllUsers]);
@@ -460,10 +449,10 @@ export function AppProvider({ children }: AppProviderProps) {
         message: 'Sua conta foi rejeitada. Entre em contato conosco para mais informações.'
       });
 
+      // ✅ ATUALIZA A LISTA DE USUÁRIOS APÓS A MUDANÇA
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário rejeitado.');
     } catch (e) {
-      console.error("Erro ao rejeitar usuário:", e);
       Alert.alert('Erro', 'Não foi possível rejeitar o usuário.');
     }
   }, [loadAllUsers]);
@@ -479,7 +468,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       await loadUserData(userId);
     } catch (e) {
-      console.error("Erro ao atualizar usuário:", e);
       throw e;
     }
   }, [loadUserData]);
@@ -531,7 +519,6 @@ export function AppProvider({ children }: AppProviderProps) {
         })
         .eq('usuario_id', user.id);
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(convocacao.goleiro_id, 'new_convocacao', {
         organizadorNome: user.nome,
         valor: convocacao.valor_retido,
@@ -541,7 +528,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Convocação criada com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao criar convocação:", error);
       Alert.alert('Erro', error.message || 'Não foi possível criar a convocação');
     }
   }, [user, getSaldoUsuario, loadData]);
@@ -563,7 +549,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (error) throw error;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(convocacao.organizador_id, 'convocacao_aceita', {
         goleiroNome: user.nome,
         valor: convocacao.valor_retido,
@@ -573,7 +558,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Convocação aceita com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao aceitar convocação:", error);
       Alert.alert('Erro', error.message || 'Não foi possível aceitar a convocação');
     }
   }, [user, convocacoes, loadData]);
@@ -601,7 +585,6 @@ export function AppProvider({ children }: AppProviderProps) {
           .eq('usuario_id', convocacao.organizador_id);
       }
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(convocacao.organizador_id, 'convocacao_recusada', {
         goleiroNome: user?.nome || 'Goleiro',
         convocacaoId
@@ -610,7 +593,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Convocação recusada com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao recusar convocação:", error);
       Alert.alert('Erro', error.message || 'Não foi possível recusar a convocação');
     }
   }, [convocacoes, getSaldo, loadData, user]);
@@ -659,7 +641,6 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_retido: (saldoOrganizador?.saldo_retido || 0) - convocacao.valor_retido,
         }, { onConflict: 'usuario_id' });
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(convocacao.goleiro_id!, 'avaliacao_recebida', {
         nota,
         coins: coins_calculados,
@@ -669,7 +650,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Goleiro avaliado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao avaliar goleiro:", error);
       Alert.alert('Erro', error.message || 'Não foi possível avaliar o goleiro');
     }
   }, [user, convocacoes, getSaldo, loadData]);
@@ -700,7 +680,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (updateError) throw updateError;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(convocacao.organizador_id, 'avaliacao_recebida', {
         categoria,
         convocacaoId,
@@ -710,7 +689,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Organizador avaliado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao avaliar organizador:", error);
       Alert.alert('Erro', error.message || 'Não foi possível avaliar o organizador');
     }
   }, [user, convocacoes, loadData]);
@@ -734,7 +712,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (error) throw error;
 
       if (convocacao.goleiro_id) {
-        // ✅ NOTIFICAÇÃO CORRIGIDA
         await sendPushNotification(convocacao.goleiro_id, 'presenca_confirmada', {
           status,
           coins: convocacao.valor_retido,
@@ -746,7 +723,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', `Presença confirmada como: ${status}`);
     } catch (error: any) {
-      console.error("Erro ao confirmar presença:", error);
       Alert.alert('Erro', error.message || 'Não foi possível confirmar a presença');
     }
   }, [user, convocacoes, loadData]);
@@ -791,7 +767,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const administradores = allAppUsers.filter(u => u.tipo_usuario === 'admin');
       
-      // ✅ NOTIFICAÇÃO CORRIGIDA para todos os admins
       await notifyMultipleUsers(
         administradores.map(admin => admin.id),
         'recarga_solicitada',
@@ -805,7 +780,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadRecargas();
       Alert.alert('Sucesso', 'Solicitação de recarga enviada para aprovação!');
     } catch (error: any) {
-      console.error("Erro ao solicitar recarga:", error);
       Alert.alert('Erro', error.message || 'Não foi possível solicitar a recarga');
     }
   }, [user, allAppUsers, loadRecargas]);
@@ -835,7 +809,6 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_coins: (saldoExistente?.saldo_coins || 0) + recarga.coins_recebidos,
         }, { onConflict: 'usuario_id' });
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(recarga.organizador_id, 'recarga_aprovada', {
         coins: recarga.coins_recebidos
       });
@@ -843,7 +816,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Recarga aprovada e saldo atualizado!');
     } catch (error: any) {
-      console.error("Erro ao aprovar recarga:", error);
       Alert.alert('Erro', error.message || 'Não foi possível aprovar a recarga');
     }
   }, [getSaldo, loadData]);
@@ -865,7 +837,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (error) throw error;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(recarga.organizador_id, 'recarga_rejeitada', {
         coins: recarga.coins_recebidos
       });
@@ -873,7 +844,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadRecargas();
       Alert.alert('Sucesso', 'Recarga rejeitada.');
     } catch (error: any) {
-      console.error("Erro ao rejeitar recarga:", error);
       Alert.alert('Erro', error.message || 'Não foi possível rejeitar a recarga');
     }
   }, [loadRecargas]);
@@ -908,7 +878,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const administradores = allAppUsers.filter(u => u.tipo_usuario === 'admin');
       
-      // ✅ NOTIFICAÇÃO CORRIGIDA para todos os admins
       await notifyMultipleUsers(
         administradores.map(admin => admin.id),
         'saque_solicitado',
@@ -922,7 +891,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Solicitação de saque enviada para aprovação!');
     } catch (error: any) {
-      console.error("Erro ao solicitar saque:", error);
       Alert.alert('Erro', error.message || 'Não foi possível solicitar o saque');
     }
   }, [user, allAppUsers, getSaldoUsuario, loadData]);
@@ -964,7 +932,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (updateError) throw updateError;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(goleiro_id, 'saque_aprovado', {
         valor: valor_coins ?? 0
       });
@@ -972,7 +939,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadSaques();
       Alert.alert('Sucesso', 'Saque aprovado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao aprovar saque:", error);
       Alert.alert('Erro', error.message || 'Não foi possível aprovar o saque');
     }
   }, [loadSaques]);
@@ -1004,7 +970,6 @@ export function AppProvider({ children }: AppProviderProps) {
           .eq('usuario_id', saque.goleiro_id);
       }
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(saque.goleiro_id, 'saque_rejeitado', {
         valor: saque.valor_saque
       });
@@ -1012,7 +977,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Saque rejeitado e valor devolvido ao saldo!');
     } catch (error: any) {
-      console.error("Erro ao rejeitar saque:", error);
       Alert.alert('Erro', error.message || 'Não foi possível rejeitar o saque');
     }
   }, [getSaldo, loadData]);
@@ -1045,7 +1009,6 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_coins: (saldoDestinatario?.saldo_coins || 0) + valor,
         }, { onConflict: 'usuario_id' });
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(destinatarioId, 'coins_recebidos', {
         remetente: user.nome,
         valor
@@ -1054,7 +1017,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadData();
       Alert.alert('Sucesso', 'Transferência realizada com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao transferir coins:", error);
       Alert.alert('Erro', error.message || 'Não foi possível realizar a transferência');
     }
   }, [user, getSaldoUsuario, getSaldo, loadData]);
@@ -1077,7 +1039,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       const administradores = allAppUsers.filter(u => u.tipo_usuario === 'admin');
       
-      // ✅ NOTIFICAÇÃO CORRIGIDA para todos os admins
       await notifyMultipleUsers(
         administradores.map(admin => admin.id),
         'novo_chamado',
@@ -1091,7 +1052,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado criado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao criar chamado:", error);
       Alert.alert('Erro', error.message || 'Não foi possível criar o chamado');
     }
   }, [user, allAppUsers, loadChamadosSuporte]);
@@ -1113,7 +1073,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (error) throw error;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(chamado.solicitante_id, 'chamado_atualizado', {
         status: 'aprovado'
       });
@@ -1121,7 +1080,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado aprovado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao aprovar chamado:", error);
       Alert.alert('Erro', error.message || 'Não foi possível aprovar o chamado');
     }
   }, [loadChamadosSuporte]);
@@ -1143,7 +1101,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (error) throw error;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(chamado.solicitante_id, 'chamado_atualizado', {
         status: 'recusado'
       });
@@ -1151,7 +1108,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado recusado com sucesso!');
     } catch (error: any) {
-      console.error("Erro ao recusar chamado:", error);
       Alert.alert('Erro', error.message || 'Não foi possível recusar o chamado');
     }
   }, [loadChamadosSuporte]);
@@ -1173,7 +1129,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       if (error) throw error;
 
-      // ✅ NOTIFICAÇÃO CORRIGIDA
       await sendPushNotification(chamado.solicitante_id, 'chamado_atualizado', {
         status: 'resolvido'
       });
@@ -1181,7 +1136,6 @@ export function AppProvider({ children }: AppProviderProps) {
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado marcado como resolvido!');
     } catch (error: any) {
-      console.error("Erro ao resolver chamado:", error);
       Alert.alert('Erro', error.message || 'Não foi possível resolver o chamado');
     }
   }, [loadChamadosSuporte]);
@@ -1208,7 +1162,6 @@ export function AppProvider({ children }: AppProviderProps) {
         if (chamado) userIdToNotify = chamado.solicitante_id;
       } else {
         const administradores = allAppUsers.filter(u => u.tipo_usuario === 'admin');
-        // ✅ NOTIFICAÇÃO CORRIGIDA para admins
         await notifyMultipleUsers(
           administradores.map(admin => admin.id),
           'nova_mensagem_suporte',
@@ -1221,7 +1174,6 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       if (userIdToNotify) {
-        // ✅ NOTIFICAÇÃO CORRIGIDA para usuário
         await sendPushNotification(userIdToNotify, 'nova_mensagem_suporte', {
           chamadoId: mensagem.chamado_id,
           remetente: 'Suporte'
@@ -1230,7 +1182,6 @@ export function AppProvider({ children }: AppProviderProps) {
 
       await loadMensagensSuporte();
     } catch (error: any) {
-      console.error("Erro ao enviar mensagem:", error);
       Alert.alert('Erro', error.message || 'Não foi possível enviar a mensagem');
     }
   }, [user, chamadosSuporte, allAppUsers, loadMensagensSuporte]);
@@ -1341,7 +1292,7 @@ export function AppProvider({ children }: AppProviderProps) {
     formatarMoeda,
     calcularTaxaConvocacao,
     calcularTaxaApp,
-    calcularValorGoleiro, // ✅ NOVA FUNÇÃO
+    calcularValorGoleiro,
   }), [
     convocacoes,
     saldos,

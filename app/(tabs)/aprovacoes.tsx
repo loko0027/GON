@@ -31,9 +31,7 @@ export default function AprovacoesTab() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [currentUserToProcess, setCurrentUserToProcess] = useState<UserToProcess | null>(null);
 
-  // --- LOG DE VERIFICAÇÃO DE ACESSO ---
   if (user?.tipo_usuario !== 'admin') {
-    console.log('[AprovacoesTab] Acesso negado: Usuário não é admin. Tipo atual:', user?.tipo_usuario);
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
@@ -42,23 +40,9 @@ export default function AprovacoesTab() {
         </View>
       </View>
     );
-  } else {
-    console.log('[AprovacoesTab] Acesso permitido: Usuário é admin.');
   }
 
-  // --- LOG: BUSCANDO TODOS OS USUÁRIOS ---
   const allUsers = getAllUsers();
-  console.log('--- [AprovacoesTab] Dados Iniciais (getAllUsers) ---');
-  console.log('[AprovacoesTab] Total de usuários retornados por getAllUsers:', allUsers.length);
-  allUsers.forEach((u, index) => {
-    console.log(`[AprovacoesTab] Usuário ${index + 1}: ID=${u.id}, Nome=${u.nome}, Status_Aprovacao=${u.status_aprovacao}, Tipo_Usuario=${u.tipo_usuario}`);
-  });
-  console.log('--- [AprovacoesTab] Fim Dados Iniciais ---');
-
-  // --- LOG: ESTADOS ATUAIS DOS FILTROS ---
-  console.log('[AprovacoesTab] Status do filtro selecionado (filterStatus):', filterStatus);
-  console.log('[AprovacoesTab] Tipo de filtro selecionado (filterTipo):', filterTipo);
-  console.log('[AprovacoesTab] Termo de busca (searchQuery):', searchQuery);
 
   const filteredUsers = allUsers.filter(usuario => {
     // Normalização dos dados para comparação
@@ -79,57 +63,35 @@ export default function AprovacoesTab() {
     // Excluir admins da lista de aprovação, pois eles não precisam ser aprovados por outros admins
     const notAdmin = tipoNormalizado !== 'admin';
 
-    // --- LOG PARA CADA USUÁRIO NO PROCESSO DE FILTRAGEM ---
-    console.log(`--- [AprovacoesTab] Avaliando Usuário: ${usuario.nome} (ID: ${usuario.id}) ---`);
-    console.log(`[AprovacoesTab]    Status Original: "${usuario.status_aprovacao}" -> Normalizado: "${statusNormalizado}"`);
-    console.log(`[AprovacoesTab]    Tipo Original: "${usuario.tipo_usuario}" -> Normalizado: "${tipoNormalizado}"`);
-    console.log(`[AprovacoesTab]    Condições:`);
-    console.log(`[AprovacoesTab]      - Corresponde à Busca ("${searchQuery}")? ${matchesSearch}`);
-    console.log(`[AprovacoesTab]      - Corresponde ao Status ("${filterStatus}")? ${matchesStatus}`);
-    console.log(`[AprovacoesTab]      - Corresponde ao Tipo ("${filterTipo}")? ${matchesTipo}`);
-    console.log(`[AprovacoesTab]      - Não é Admin? ${notAdmin}`);
-    const shouldInclude = matchesSearch && matchesStatus && matchesTipo && notAdmin;
-    console.log(`[AprovacoesTab]    RESULTADO FINAL para ${usuario.nome}: ${shouldInclude ? 'INCLUÍDO' : 'EXCLUÍDO'}`);
-    console.log('-------------------------------------------');
-
-    return shouldInclude;
+    return matchesSearch && matchesStatus && matchesTipo && notAdmin;
   });
-
-  // --- LOG: RESULTADO FINAL DA FILTRAGEM ---
-  console.log('--- [AprovacoesTab] Resultado da Filtragem ---');
-  console.log('[AprovacoesTab] Usuários filtrados (filteredUsers) contagem:', filteredUsers.length);
-  if (filteredUsers.length === 0) {
-    console.log('[AprovacoesTab] Nenhum usuário encontrado após a aplicação dos filtros.');
-  } else {
-    filteredUsers.forEach((u, index) => {
-      console.log(`[AprovacoesTab]    Filtrado ${index + 1}: Nome=${u.nome}, Status=${u.status_aprovacao}`);
-    });
-  }
-  console.log('--- [AprovacoesTab] Fim Resultado da Filtragem ---');
 
   // Função para abrir o modal com os dados do usuário e a ação
   const openConfirmationModal = (userId: string, nome: string, action: 'aprovar' | 'rejeitar') => {
-    console.log(`[AprovacoesTab] Abrindo modal de confirmação para ${action} ${nome} (ID: ${userId})`);
+    console.log(`[UI - Clique] Botão ${action.toUpperCase()} clicado para o usuário: ${nome} (ID: ${userId})`);
     setCurrentUserToProcess({ id: userId, nome: nome, action: action });
     setIsModalVisible(true);
   };
 
   // Função que será chamada ao confirmar no modal
   const handleConfirmAction = async () => {
+    console.log('[AprovacoesTab - handleConfirmAction] Função de confirmação do modal iniciada.'); // LOG
     if (!currentUserToProcess) {
       console.error("[AprovacoesTab - handleConfirmAction] Erro: Nenhum usuário selecionado no modal.");
       return;
     }
 
     const { id, nome, action } = currentUserToProcess;
-    console.log(`[AprovacoesTab - handleConfirmAction] Confirmando ${action} para ${nome} (ID: ${id})`);
+    console.log(`[AprovacoesTab - handleConfirmAction] Confirmando ${action} para ${nome} (ID: ${id})`); // LOG
 
     try {
       if (action === 'aprovar') {
+        console.log('[AprovacoesTab - handleConfirmAction] Tentando aprovar usuário via AppContext...'); // LOG
         await aprovarUsuario(id);
         Alert.alert('Sucesso', 'Usuário aprovado com sucesso!');
         console.log(`[AprovacoesTab - handleConfirmAction] Usuário ${nome} (ID: ${id}) aprovado com sucesso via AppContext!`);
       } else { // action === 'rejeitar'
+        console.log('[AprovacoesTab - handleConfirmAction] Tentando rejeitar usuário via AppContext...'); // LOG
         await rejeitarUsuario(id);
         Alert.alert('Sucesso', 'Usuário rejeitado com sucesso!');
         console.log(`[AprovacoesTab - handleConfirmAction] Usuário ${nome} (ID: ${id}) rejeitado com sucesso via AppContext!`);
@@ -320,10 +282,7 @@ export default function AprovacoesTab() {
                   <View style={styles.actionButtons}>
                     <TouchableOpacity
                       style={styles.rejectButton}
-                      onPress={() => {
-                        console.log(`[UI - Clique] Botão REJEITAR clicado para o usuário: ${usuario.nome} (ID: ${usuario.id})`);
-                        openConfirmationModal(usuario.id, usuario.nome, 'rejeitar'); // Usa o modal
-                      }}
+                      onPress={() => openConfirmationModal(usuario.id, usuario.nome, 'rejeitar')}
                     >
                       <XCircle size={16} color="#fff" />
                       <Text style={styles.buttonText}>Rejeitar</Text>
@@ -331,10 +290,7 @@ export default function AprovacoesTab() {
 
                     <TouchableOpacity
                       style={styles.approveButton}
-                      onPress={() => {
-                        console.log(`[UI - Clique] Botão APROVAR clicado para o usuário: ${usuario.nome} (ID: ${usuario.id})`);
-                        openConfirmationModal(usuario.id, usuario.nome, 'aprovar'); // Usa o modal
-                      }}
+                      onPress={() => openConfirmationModal(usuario.id, usuario.nome, 'aprovar')}
                     >
                       <CheckCircle size={16} color="#fff" />
                       <Text style={styles.buttonText}>Aprovar</Text>
@@ -370,7 +326,6 @@ export default function AprovacoesTab() {
               <TouchableOpacity
                 style={[modalStyles.modalButton, modalStyles.buttonCancel]}
                 onPress={() => {
-                  console.log(`[AprovacoesTab - Modal] Cancelado para ${currentUserToProcess?.nome} (ID: ${currentUserToProcess?.id})`);
                   setIsModalVisible(false);
                   setCurrentUserToProcess(null);
                 }}
@@ -383,7 +338,11 @@ export default function AprovacoesTab() {
                   modalStyles.modalButton,
                   currentUserToProcess?.action === 'aprovar' ? modalStyles.buttonApprove : modalStyles.buttonReject
                 ]}
-                onPress={handleConfirmAction} // Chama a função que processa a ação
+                // --- AQUI ESTÁ A CORREÇÃO COM O LOG DE VERIFICAÇÃO FINAL ---
+                onPress={() => {
+                  console.log(`[UI - Clique no Modal] Botão CONFIRMAR ${currentUserToProcess?.action} clicado.`);
+                  handleConfirmAction();
+                }}
               >
                 <Text style={modalStyles.buttonText}>
                   {currentUserToProcess?.action === 'aprovar' ? 'Aprovar' : 'Rejeitar'}

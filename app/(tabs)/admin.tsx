@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import { Settings, Plus, CreditCard as Edit3, ChartBar as BarChart3, Bell } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 função para enviar push via Expo API
+// 🚀 Função para enviar push via Expo API
 async function sendPushNotification(tokens: string[], title: string, body: string) {
   try {
     const messages = tokens.map(token => ({
@@ -30,6 +30,7 @@ async function sendPushNotification(tokens: string[], title: string, body: strin
     console.log("Resultado Expo Push:", result);
   } catch (error) {
     console.error("Erro ao enviar push:", error);
+    throw error;
   }
 }
 
@@ -51,6 +52,7 @@ export default function AdminTab() {
     );
   }
 
+  // Estatísticas
   const stats = {
     totalConvocacoes: convocacoes.length,
     convocacoesAceitas: convocacoes.filter(c => c.status === 'aceito').length,
@@ -60,6 +62,7 @@ export default function AdminTab() {
     saquesPendentes: saques.filter(s => s.status === 'pendente').length,
   };
 
+  // Adicionar categoria
   const handleAddCategory = () => {
     if (!newCategory.nome || !newCategory.emoji) {
       Alert.alert('Erro', 'Preencha todos os campos');
@@ -71,6 +74,7 @@ export default function AdminTab() {
     setNewCategory({ nome: '', emoji: '', tipo: 'positiva' });
   };
 
+  // Enviar notificações
   const handleSendNotification = async () => {
     if (!notification.title || !notification.message) {
       Alert.alert("Erro", "Preencha título e mensagem.");
@@ -78,21 +82,19 @@ export default function AdminTab() {
     }
 
     try {
-      // 🔎 Buscar tokens na tabela user_push_tokens apenas de usuários aprovados
       const { data: tokensData, error } = await supabase
         .from('user_push_tokens')
-        .select('expo_push_token')
-        .in('usuario', supabase
-            .from('usuarios')
-            .select('id')
-            .eq('status_aprovacao', 'aprovado')
-        );
+        .select(`expo_push_token, usuario (id, status_aprovacao)`);
 
       if (error) throw error;
 
-      const tokens = tokensData.map(t => t.expo_push_token).filter(Boolean);
+      const tokens = tokensData
+        .filter(t => t.usuario?.status_aprovacao === 'aprovado')
+        .map(t => t.expo_push_token)
+        .filter(Boolean);
+
       if (tokens.length === 0) {
-        Alert.alert("Aviso", "Nenhum usuário com token de notificação encontrado.");
+        Alert.alert("Aviso", "Nenhum usuário aprovado com token de notificação encontrado.");
         return;
       }
 
@@ -141,10 +143,7 @@ export default function AdminTab() {
     <View style={styles.tabContent}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>🏷️ Categorias de Avaliação</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddCategory(true)}
-        >
+        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddCategory(true)}>
           <Plus size={16} color="#fff" />
           <Text style={styles.addButtonText}>Adicionar</Text>
         </TouchableOpacity>
@@ -188,16 +187,10 @@ export default function AdminTab() {
             </View>
           </View>
           <View style={styles.formActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowAddCategory(false)}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddCategory(false)}>
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleAddCategory}
-            >
+            <TouchableOpacity style={styles.confirmButton} onPress={handleAddCategory}>
               <Text style={styles.confirmButtonText}>Adicionar</Text>
             </TouchableOpacity>
           </View>

@@ -305,9 +305,9 @@ export default function Index() {
           <Text style={styles.statsTitle}>Junte-se à Comunidade</Text>
           <View style={styles.statsGrid}>
             {[
-              { number: '500+', label: 'Goleiros', icon: Users },
-              { number: '1000+', label: 'Jogos', icon: TrendingUp },
-              { number: '50+', label: 'Organizadores', icon: Award },
+              { number: '10+', label: 'Goleiros', icon: Users },
+              { number: '15+', label: 'Jogos', icon: TrendingUp },
+              { number: '5+', label: 'Organizadores', icon: Award },
             ].map((stat, index) => (
               <Animated.View
                 key={index}

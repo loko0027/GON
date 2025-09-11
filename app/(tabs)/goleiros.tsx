@@ -93,15 +93,6 @@ export default function GoleirosTab() {
     }
   }, [selectedHoraFim]);
 
-  // ✅ NOVO: Calcular valor em tempo real quando dados mudarem
-  useEffect(() => {
-    if (selectedGoleiro && selectedDate && selectedHoraInicio) {
-      calcularValorEmTempoReal();
-    } else {
-      setValorCalculado(null);
-    }
-  }, [selectedGoleiro, selectedDate, selectedHoraInicio]);
-
   const calcularValorEmTempoReal = () => {
     if (!selectedGoleiro || !selectedDate || !selectedHoraInicio) return;
 
@@ -109,7 +100,6 @@ export default function GoleirosTab() {
     dataHora.setHours(selectedHoraInicio.getHours());
     dataHora.setMinutes(selectedHoraInicio.getMinutes());
 
-    // Determinar nível do goleiro
     let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
     if (selectedGoleiro.nota_media < 3) {
       nivel = 'iniciante';
@@ -119,12 +109,10 @@ export default function GoleirosTab() {
       nivel = 'veterano';
     }
 
-    // Calcular componentes do valor
     const valorGoleiro = calcularValorGoleiro(nivel, dataHora);
-    const taxaApp = calcularTaxaApp(0); // 5 coins fixos
+    const taxaApp = calcularTaxaApp(0);
     const total = valorGoleiro + taxaApp;
 
-    // Calcular taxas adicionais para exibição
     const diaSemana = dataHora.getDay();
     const diasValorizados = [0, 1, 5, 6]; // dom, seg, sex, sab
     const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
@@ -171,22 +159,10 @@ export default function GoleirosTab() {
     return matchesSearch && matchesRating;
   });
 
-  const handleConvocar = (goleiro: any) => {
-    const custo = custoPorGoleiro(goleiro.nota_media);
-    if (saldo.saldo_coins < custo) {
-      Alert.alert(
-        'Saldo Insuficiente',
-        `Você precisa de ${custo} coins para convocar este goleiro.\n\n` +
-        `Seu saldo atual: ${saldo.saldo_coins} coins\n` +
-        `Saldo retido: ${saldo.saldo_retido} coins`,
-        [
-          { text: 'Entendi', style: 'cancel' },
-          { text: 'Adicionar Coins', onPress: () => { /* navegação para adicionar coins */ } },
-        ]
-      );
-      return;
-    }
+  // ✅ NOVO: Lógica de verificação de saldo no botão CALCULAR
+  const handleCalcular = (goleiro: any) => {
     setSelectedGoleiro(goleiro);
+    calcularValorEmTempoReal();
     setShowConvocacaoForm(true);
   };
 
@@ -348,7 +324,6 @@ export default function GoleirosTab() {
             />
           </View>
 
-          {/* ✅ NOVA SEÇÃO: DETALHES DO VALOR CALCULADO */}
           {valorCalculado && (
             <View style={styles.valorDetalhado}>
               <Text style={styles.valorTitulo}>💵 Detalhamento do Valor</Text>
@@ -401,14 +376,12 @@ export default function GoleirosTab() {
           </View>
 
           <TouchableOpacity
-            style={[styles.submitButton, saldo.saldo_coins < custoReal && styles.disabledButton]}
+            style={[styles.submitButton, !valorCalculado && styles.disabledButton]}
             onPress={handleSubmitConvocacao}
-            disabled={saldo.saldo_coins < custoReal || !valorCalculado}
+            disabled={!valorCalculado}
           >
             <Text style={styles.submitButtonText}>
-              {!valorCalculado ? 'Calculando...' : 
-               saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : 
-               `Confirmar Convocação - ${custoReal} coins`}
+              {!valorCalculado ? 'Calcule antes de confirmar' : `Confirmar Convocação - ${valorCalculado.total} coins`}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -428,146 +401,97 @@ export default function GoleirosTab() {
         {saldo.saldo_retido > 0 && <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>}
       </View>
 
-      <View style={styles.filters}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#6b7280" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar goleiro..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        <View style={styles.filterContainer}>
-          <Filter size={20} color="#6b7280" />
-          <TextInput
-            style={styles.filterInput}
-            placeholder="Nota mín."
-            value={filterByRating}
-            onChangeText={setFilterByRating}
-            keyboardType="numeric"
-          />
-        </View>
-      </View>
-
       <ScrollView
         style={styles.goleirosList}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refreshGoleiros}
-            tintColor="#10B981"
-            colors={['#10B981']}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshGoleiros} tintColor="#10B981" colors={['#10B981']} />}
       >
-        {filteredGoleiros.map((goleiro) => {
-          const custo = custoPorGoleiro(goleiro.nota_media);
-          const saldoInsuficiente = saldo.saldo_coins < custo;
-
-          return (
-            <View key={goleiro.id} style={styles.goleiroCard}>
-              <View style={styles.goleiroHeader}>
-                <View style={styles.goleiroInfo}>
-                  <View style={styles.goleiroAvatar}>
-                    {goleiro.foto_url ? <Image source={{ uri: goleiro.foto_url }} style={styles.avatarImage} /> : <User size={24} color="#10B981" />}
-                  </View>
-                  <View>
-                    <Text style={styles.goleiroNome}>{goleiro.nome}</Text>
-                    <View style={styles.goleiroStats}>
-                      <View style={styles.statItem}>
-                        <Star size={14} color="#F59E0B" />
-                        <Text style={styles.statText}>{goleiro.nota_media?.toFixed(1) ?? '0.0'}</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Target size={14} color="#6b7280" />
-                        <Text style={styles.statText}>{goleiro.jogos_realizados} jogos</Text>
-                      </View>
+        {filteredGoleiros.map((goleiro) => (
+          <View key={goleiro.id} style={styles.goleiroCard}>
+            <View style={styles.goleiroHeader}>
+              <View style={styles.goleiroInfo}>
+                <View style={styles.goleiroAvatar}>
+                  {goleiro.foto_url ? <Image source={{ uri: goleiro.foto_url }} style={styles.avatarImage} /> : <User size={24} color="#10B981" />}
+                </View>
+                <View>
+                  <Text style={styles.goleiroNome}>{goleiro.nome}</Text>
+                  <View style={styles.goleiroStats}>
+                    <View style={styles.statItem}>
+                      <Star size={14} color="#F59E0B" />
+                      <Text style={styles.statText}>{goleiro.nota_media?.toFixed(1) ?? '0.0'}</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                      <Target size={14} color="#6b7280" />
+                      <Text style={styles.statText}>{goleiro.jogos_realizados} jogos</Text>
                     </View>
                   </View>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.convocarButton, saldoInsuficiente && styles.disabledButton]}
-                  onPress={() => handleConvocar(goleiro)}
-                  disabled={saldoInsuficiente}
-                >
-                  <Plus size={16} color="#fff" />
-                  <Text style={styles.convocarText}>
-                    {saldoInsuficiente ? `${custo} coins` : 'Convocar'}
-                  </Text>
-                </TouchableOpacity>
               </View>
 
-              <View style={styles.goleiroTags}>
-                {goleiro.tags.map((tag: string, index: number) => (
-                  <View key={index} style={styles.tag}>
-                    <Text style={styles.tagText}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
+              <TouchableOpacity style={styles.convocarButton} onPress={() => handleCalcular(goleiro)}>
+                <Plus size={16} color="#fff" />
+                <Text style={styles.convocarText}>Calcular</Text>
+              </TouchableOpacity>
             </View>
-          );
-        })}
+
+            <View style={styles.goleiroTags}>
+              {goleiro.tags.map((tag: string, index: number) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
       </ScrollView>
     </View>
   );
 }
 
+// ========================= STYLES =========================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9' },
-  header: { paddingVertical: 24, paddingHorizontal: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
-  title: { fontSize: 28, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
-  subtitle: { fontSize: 15, color: '#64748b', fontWeight: '500' },
-  saldoCard: { backgroundColor: '#10B981', padding: 12, margin: 12, borderRadius: 12 },
-  saldoText: { color: '#000', fontWeight: '600', fontSize: 14 },
-  saldoRetido: { color: '#d1fae5', fontWeight: '500', fontSize: 12, marginTop: 2 },
-  filters: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 12, justifyContent: 'space-between' },
-  searchContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', flex: 1, marginRight: 6 },
-  searchInput: { marginLeft: 6, flex: 1, height: 36 },
-  filterContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', flex: 1, marginLeft: 6 },
-  filterInput: { marginLeft: 6, flex: 1, height: 36 },
-  goleirosList: { paddingHorizontal: 12, marginBottom: 12 },
-  goleiroCard: { backgroundColor: '#fff', padding: 12, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  errorText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#ef4444' },
+  header: { padding: 16 },
+  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
+  subtitle: { fontSize: 14, color: '#6b7280', marginTop: 4 },
+  saldoCard: { backgroundColor: '#ecfdf5', padding: 12, margin: 16, borderRadius: 8 },
+  saldoText: { fontSize: 16, color: '#065f46', fontWeight: '600' },
+  saldoRetido: { fontSize: 14, color: '#10b981', marginTop: 4 },
+  goleirosList: { flex: 1 },
+  goleiroCard: { backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 8, borderRadius: 8, padding: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   goleiroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   goleiroInfo: { flexDirection: 'row', alignItems: 'center' },
-  goleiroAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#e5e7eb', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  goleiroAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#d1fae5', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarImage: { width: 48, height: 48, borderRadius: 24 },
-  goleiroNome: { fontWeight: '700', fontSize: 16, color: '#0f172a' },
+  goleiroNome: { fontSize: 16, fontWeight: '600', color: '#111827' },
   goleiroStats: { flexDirection: 'row', marginTop: 4 },
-  statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
-  statText: { fontSize: 12, marginLeft: 4, color: '#6b7280' },
-  convocarButton: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
-  convocarText: { color: '#fff', fontWeight: '600', marginLeft: 4, fontSize: 12 },
-  disabledButton: { backgroundColor: '#94a3b8' },
+  statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
+  statText: { fontSize: 12, color: '#6b7280', marginLeft: 4 },
+  convocarButton: { flexDirection: 'row', backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, alignItems: 'center' },
+  convocarText: { color: '#fff', marginLeft: 6, fontWeight: '600' },
   goleiroTags: { flexDirection: 'row', marginTop: 8, flexWrap: 'wrap' },
-  tag: { backgroundColor: '#d1fae5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 4, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
-  tagText: { fontSize: 10, color: '#065f46', fontWeight: '500' },
-  priceTag: { backgroundColor: '#10B981', flexDirection: 'row', alignItems: 'center' },
-  priceText: { color: '#fff', marginLeft: 2 },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#f1f5f9' },
-  formTitle: { fontWeight: '700', fontSize: 18, color: '#0f172a' },
-  closeButton: { padding: 6 },
-  closeButtonText: { fontSize: 18, fontWeight: '700', color: '#ef4444' },
-  form: { paddingHorizontal: 12 },
-  inputGroup: { marginBottom: 12 },
-  label: { fontWeight: '500', color: '#0f172a', marginBottom: 4 },
-  input: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', fontSize: 14 },
-  
-  // ✅ NOVOS ESTILOS para detalhamento do valor
-  valorDetalhado: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, marginVertical: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  valorTitulo: { fontWeight: '700', color: '#0f172a', marginBottom: 8, fontSize: 16 },
+  tag: { backgroundColor: '#e0f2fe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 4, marginBottom: 4 },
+  tagText: { fontSize: 10, color: '#0284c7', fontWeight: '600' },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#f3f4f6' },
+  formTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  closeButton: { padding: 4 },
+  closeButtonText: { fontSize: 20, color: '#6b7280' },
+  form: { paddingHorizontal: 16, paddingBottom: 32 },
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 4 },
+  input: { backgroundColor: '#fff', borderColor: '#d1d5db', borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827' },
+  valorDetalhado: { backgroundColor: '#f0fdf4', padding: 12, borderRadius: 8, marginBottom: 16 },
+  valorTitulo: { fontSize: 16, fontWeight: '700', color: '#065f46', marginBottom: 8 },
   valorItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  valorLabel: { color: '#64748b', fontSize: 12 },
-  valorNumero: { fontWeight: '600', color: '#0f172a', fontSize: 12 },
-  valorGoleiro: { color: '#10B981', fontWeight: '700' },
-  taxaApp: { color: '#ef4444' },
-  valorTotal: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 6, marginTop: 4 },
-  valorTotalNumero: { color: '#10B981', fontWeight: '700', fontSize: 14 },
-  
-  valorInfo: { marginVertical: 12 },
-  valorText: { fontWeight: '600', color: '#0f172a', marginBottom: 2 },
-  submitButton: { backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 6 },
-  submitButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  errorText: { color: '#ef4444', fontSize: 16, textAlign: 'center', marginTop: 24 }
+  valorLabel: { fontSize: 14, color: '#065f46' },
+  valorNumero: { fontSize: 14, fontWeight: '600', color: '#065f46' },
+  valorGoleiro: { color: '#10b981' },
+  taxaApp: { color: '#3b82f6' },
+  valorTotal: { borderTopWidth: 1, borderTopColor: '#d1fae5', marginTop: 8, paddingTop: 8 },
+  valorTotalNumero: { fontSize: 16, fontWeight: '700', color: '#065f46' },
+  valorInfo: { marginBottom: 16 },
+  valorText: { fontSize: 14, color: '#065f46' },
+  submitButton: { backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 8 },
+  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  disabledButton: { backgroundColor: '#6ee7b7' }
 });

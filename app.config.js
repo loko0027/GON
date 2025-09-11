@@ -2,27 +2,26 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "2.0.0",
+  version: "2.09.02",
   orientation: "portrait",
   icon: "./assets/images/goleiroon.png",
   scheme: "myapp",
   userInterfaceStyle: "automatic",
-  
+
   notification: {
     iosDisplayInForeground: true,
-    // No Android, a cor do ícone da notificação será definida no plugin abaixo
   },
 
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.seunome.goleiroon",
+    bundleIdentifier: "com.pablo095.goleiroon",
     infoPlist: {
       UIBackgroundModes: ["remote-notification"],
     },
   },
 
   android: {
-    package: "com.seunome.goleiroon",
+    package: "com.pablo095.goleiroon",
     versionCode: 1,
     permissions: [
       "CAMERA",
@@ -80,12 +79,12 @@ export default ({ config }) => ({
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     eas: {
-      projectId: "c29e779a-d56e-46f2-a7db-a524757a9c52",
+      projectId: "b94c12e5-d086-46c1-a641-f399cda2ce70", // ⚡ Project ID do EAS atual
     },
   },
 
   updates: {
-    fallbackToCacheTimeout: 0, // padrão recomendado para EAS
+    fallbackToCacheTimeout: 0,
   },
 
   runtimeVersion: {

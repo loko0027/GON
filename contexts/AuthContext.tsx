@@ -1,87 +1,8 @@
-// context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { Session } from "@supabase/supabase-js";
 import { User } from "@/types";
-import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
-import { Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-// ===== Funções de Push Token =====
-async function getPushToken(): Promise<string | null> {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== "granted") {
-    console.log("[PUSH] Permissão de notificação negada");
-    return null;
-  }
-
-  try {
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    });
-    const token = tokenData.data;
-    console.log("[PUSH] Token obtido:", token);
-    return token;
-  } catch (error) {
-    console.error("[PUSH] Erro ao obter token:", error);
-    return null;
-  }
-}
-
-async function saveTokenLocally(token: string) {
-  await AsyncStorage.setItem("@push_token", token);
-}
-
-async function getTokenLocal(): Promise<string | null> {
-  return await AsyncStorage.getItem("@push_token");
-}
-
-async function associateTokenToUser(userId: string) {
-  const token = await getTokenLocal();
-  if (!token) return;
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.MAX,
-    });
-  }
-
-  const { error } = await supabase.from("user_push_tokens").upsert(
-    {
-      usuario: userId,
-      expo_push_token: token,
-      plataforma: Platform.OS,
-    },
-    { onConflict: ["usuario", "plataforma"] }
-  );
-
-  if (error) console.error("[PUSH] Erro ao salvar token no Supabase:", error);
-  else console.log("[PUSH] Token associado ao usuário com sucesso!");
-}
-
-// Hook que registra token automaticamente
-export function usePushToken(userId?: string) {
-  useEffect(() => {
-    (async () => {
-      const token = await getPushToken();
-      if (token) {
-        await saveTokenLocally(token);
-        if (userId) {
-          await associateTokenToUser(userId);
-        }
-      }
-    })();
-  }, [userId]);
-}
+import { registerPushToken } from "@/services/notificationService";
 
 // ===== Auth Context =====
 interface AuthContextType {
@@ -119,7 +40,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ===== Funções do usuário =====
+  // ===== Carrega perfil do usuário =====
   const loadUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -127,7 +48,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .select("*")
         .eq("id", userId)
         .single();
-
       if (error) throw error;
 
       if (data) {
@@ -155,6 +75,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // ===== Coins =====
   const adicionarCoins = async (valor: number, descricao: string) => {
     if (!user) throw new Error("Usuário não autenticado");
     try {
@@ -210,36 +131,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // ===== Inicialização =====
   useEffect(() => {
     const initialize = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-      if (error) console.error("[AUTH] Erro ao obter sessão inicial:", error);
-      setSession(session);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        setSession(session);
 
-      if (session?.user) {
-        await loadUserProfile(session.user.id);
-        await associateTokenToUser(session.user.id); // ⚡ token registrado aqui
-      } else {
-        setUser(null);
+        if (session?.user) {
+          await loadUserProfile(session.user.id);
+          await registerPushToken(session.user.id); // ✅ registro centralizado
+        } else {
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initialize();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-          await associateTokenToUser(session.user.id); // ⚡ token atualizado aqui
-        } else {
-          setUser(null);
-        }
-        setLoading(false);
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+
+      if (session?.user) {
+        await loadUserProfile(session.user.id);
+        await registerPushToken(session.user.id);
+      } else {
+        setUser(null);
       }
-    );
+    });
 
     return () => listener?.subscription.unsubscribe();
   }, []);
@@ -255,13 +175,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (error) throw error;
 
       if (data.user) {
-        const userProfile = await loadUserProfile(data.user.id);
-        if (!userProfile) throw new Error("Perfil não encontrado");
-        if (userProfile.status_aprovacao === "rejeitado") {
+        const profile = await loadUserProfile(data.user.id);
+        if (!profile) throw new Error("Perfil não encontrado");
+        if (profile.status_aprovacao === "rejeitado") {
           await supabase.auth.signOut();
           throw new Error("Sua conta foi rejeitada.");
         }
-        await associateTokenToUser(data.user.id);
+
+        await registerPushToken(data.user.id); // ✅ registro centralizado
       }
     } finally {
       setLoading(false);
@@ -301,7 +222,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         });
         if (profileError) throw profileError;
 
-        await associateTokenToUser(data.user.id); // ⚡ token registrado aqui
+        await registerPushToken(data.user.id); // ✅ registro centralizado
       }
     } finally {
       setLoading(false);
@@ -325,19 +246,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!user) throw new Error("Usuário não autenticado");
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("usuarios")
-        .update(updates)
-        .eq("id", user.id);
+      const { error } = await supabase.from("usuarios").update(updates).eq("id", user.id);
       if (error) throw error;
       await loadUserProfile(user.id);
     } finally {
       setLoading(false);
     }
   };
-
-  // Hook de push token integrado ao user logado
-  usePushToken(session?.user?.id);
 
   return (
     <AuthContext.Provider

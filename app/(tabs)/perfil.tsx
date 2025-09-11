@@ -57,7 +57,10 @@ export default function PerfilTab() {
             <View style={styles.statItem}>
               <Target size={16} color="#10B981" />
               <Text style={styles.statValue}>{user.jogos_realizados || 0}</Text>
-              <Text style={styles.statLabel}>Jogos</Text>
+              <Text style={styles.statLabel}>
+                {/* ✅ CORREÇÃO APLICADA AQUI */}
+                {user.tipo_usuario === 'organizador' ? 'Convocações' : 'Jogos'}
+              </Text>
             </View>
 
             {user.tipo_usuario === 'goleiro' && (
@@ -102,7 +105,7 @@ export default function PerfilTab() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>GoleiroON v2.0 - Conectando o futebol amador</Text>
+          <Text style={styles.footerText}>GoleiroON v2.09.02 - Conectando o futebol amador</Text>
         </View>
       </ScrollView>
 

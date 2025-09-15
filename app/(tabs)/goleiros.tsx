@@ -171,21 +171,8 @@ export default function GoleirosTab() {
     return matchesSearch && matchesRating;
   });
 
+  // Alteração aqui: removendo a lógica de verificação de saldo inicial
   const handleConvocar = (goleiro: any) => {
-    const custo = custoPorGoleiro(goleiro.nota_media);
-    if (saldo.saldo_coins < custo) {
-      Alert.alert(
-        'Saldo Insuficiente',
-        `Você precisa de ${custo} coins para convocar este goleiro.\n\n` +
-        `Seu saldo atual: ${saldo.saldo_coins} coins\n` +
-        `Saldo retido: ${saldo.saldo_retido} coins`,
-        [
-          { text: 'Entendi', style: 'cancel' },
-          { text: 'Adicionar Coins', onPress: () => { /* navegação para adicionar coins */ } },
-        ]
-      );
-      return;
-    }
     setSelectedGoleiro(goleiro);
     setShowConvocacaoForm(true);
   };
@@ -407,8 +394,8 @@ export default function GoleirosTab() {
           >
             <Text style={styles.submitButtonText}>
               {!valorCalculado ? 'Calculando...' : 
-               saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : 
-               `Confirmar Convocação - ${custoReal} coins`}
+                saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : 
+                `Confirmar Convocação - ${custoReal} coins`}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -463,7 +450,6 @@ export default function GoleirosTab() {
       >
         {filteredGoleiros.map((goleiro) => {
           const custo = custoPorGoleiro(goleiro.nota_media);
-          const saldoInsuficiente = saldo.saldo_coins < custo;
 
           return (
             <View key={goleiro.id} style={styles.goleiroCard}>
@@ -488,13 +474,12 @@ export default function GoleirosTab() {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.convocarButton, saldoInsuficiente && styles.disabledButton]}
+                  style={styles.convocarButton}
                   onPress={() => handleConvocar(goleiro)}
-                  disabled={saldoInsuficiente}
                 >
                   <Plus size={16} color="#fff" />
                   <Text style={styles.convocarText}>
-                    {saldoInsuficiente ? `${custo} coins` : 'Convocar'}
+                    Convocar
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -515,13 +500,13 @@ export default function GoleirosTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9' },
+  container: { flex: 1, backgroundColor: '#ffffffff' },
   header: { paddingVertical: 24, paddingHorizontal: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   title: { fontSize: 28, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
   subtitle: { fontSize: 15, color: '#64748b', fontWeight: '500' },
   saldoCard: { backgroundColor: '#10B981', padding: 12, margin: 12, borderRadius: 12 },
   saldoText: { color: '#000', fontWeight: '600', fontSize: 14 },
-  saldoRetido: { color: '#d1fae5', fontWeight: '500', fontSize: 12, marginTop: 2 },
+  saldoRetido: { color: '#000000ff', fontWeight: '500', fontSize: 12, marginTop: 2 },
   filters: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 12, justifyContent: 'space-between' },
   searchContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', flex: 1, marginRight: 6 },
   searchInput: { marginLeft: 6, flex: 1, height: 36 },
@@ -555,7 +540,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', fontSize: 14 },
   
   // ✅ NOVOS ESTILOS para detalhamento do valor
-  valorDetalhado: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, marginVertical: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  valorDetalhado: { backgroundColor: '#ffffffff', padding: 12, borderRadius: 8, marginVertical: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   valorTitulo: { fontWeight: '700', color: '#0f172a', marginBottom: 8, fontSize: 16 },
   valorItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   valorLabel: { color: '#64748b', fontSize: 12 },

@@ -18,7 +18,7 @@ export interface Convocacao {
   data_hora_inicio: Date;
   data_hora_fim: Date;
   local: string;
-  status: 'pendente' | 'aceito' | 'recusado' | 'presente' | 'finalizado';
+  status: 'pendente' | 'aceito' | 'recusado' | 'presente' | 'perdida';
   valor_retido: number;
   organizador?: User;
   goleiro?: User;

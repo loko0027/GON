@@ -351,7 +351,7 @@ export default function SuporteTab() {
       <ScrollView style={styles.chamadosList}>
         {meusChamados.length === 0 ? (
           <View style={styles.emptyState}>
-            <Shield size={64} color="#cbd5e1" />
+            <Shield size={64} color="#030303ff" />
             <Text style={styles.emptyTitle}>
               {isAdmin ? 'Nenhum chamado ainda' : 'Nenhum chamado criado'}
             </Text>
@@ -434,7 +434,7 @@ export default function SuporteTab() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#ffffffff',
     },
     header: {
         backgroundColor: '#ffffff',
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     statBadge: {
-        backgroundColor: '#e0e7ff',
+        backgroundColor: '#000000ff',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 20,
@@ -483,11 +483,11 @@ const styles = StyleSheet.create({
     statNumber: {
         fontWeight: '700',
         fontSize: 16,
-        color: '#4338ca',
+        color: '#fcfcfcff',
     },
     statLabel: {
         fontSize: 12,
-        color: '#4338ca',
+        color: '#ffffffff',
     },
     actionContainer: {
         paddingHorizontal: 20,
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         fontSize: 14,
         borderWidth: 1,
-        borderColor: '#cbd5e1',
+        borderColor: '#585b5fe8',
         textAlignVertical: 'top',
     },
     formActions: {
@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
     },
     mensagemInicial: {
         marginBottom: 12,
-        backgroundColor: '#e2e8f0', // Um pouco diferente para destacar
+        backgroundColor: '#000000ff', // Um pouco diferente para destacar
         padding: 10,
         borderRadius: 8,
     },
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     },
     mensagemHoraOutro: {
         fontSize: 10,
-        color: '#94a3b8',
+        color: '#000000ff',
         marginTop: 4,
         textAlign: 'right',
     },
@@ -765,13 +765,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderTopWidth: 1,
-        borderColor: '#cbd5e1',
+        borderColor: '#000000ff',
         backgroundColor: '#fff',
         alignItems: 'center',
     },
     inputMensagem: {
         flex: 1,
-        backgroundColor: '#f1f5f9',
+        backgroundColor: '#000000ff',
         borderRadius: 24,
         paddingHorizontal: 16,
         paddingVertical: 8,
@@ -796,11 +796,11 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#94a3b8',
+        color: '#000000ff',
     },
     emptySubtitle: {
         fontSize: 14,
-        color: '#cbd5e1',
+        color: '#000000ff',
         textAlign: 'center',
         paddingHorizontal: 20,
     },

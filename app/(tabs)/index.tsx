@@ -206,7 +206,7 @@ export default function HomeTab() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor="#0971d8ff" />
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingTop: 20, paddingHorizontal: 20 }}
@@ -341,12 +341,12 @@ export default function HomeTab() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
+  safeArea: { flex: 1, backgroundColor: '#ffffffff' },
   container: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 6, color: '#374151' },
-  subtitle: { fontSize: 16, color: '#6B7280', marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 6, color: '#000000ff' },
+  subtitle: { fontSize: 16, color: '#000000ff', marginBottom: 20 },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffffff',
     borderRadius: 14,
     padding: 20,
     marginBottom: 16,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   cardDesc: { fontSize: 15, color: '#4B5563', marginBottom: 12 },
   cardDate: { fontSize: 13, color: '#9CA3AF', textAlign: 'right' },
   form: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffffff',
     padding: 15,
     borderRadius: 14,
     marginBottom: 20,

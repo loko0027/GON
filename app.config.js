@@ -2,7 +2,7 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "2.09.02",
+  version: "2.09.06",
   orientation: "portrait",
   icon: "./assets/images/goleiroon.png",
   scheme: "myapp",
@@ -35,6 +35,11 @@ export default ({ config }) => ({
       foregroundImage: "./assets/images/goleiroon.png",
       backgroundColor: "#FFFFFF",
     },
+    notification: {
+      icon: "./assets/images/Sino.png",
+      color: "#FF0000",
+    },
+    // googleServicesFile removido ✅
   },
 
   web: {
@@ -50,9 +55,7 @@ export default ({ config }) => ({
     [
       "expo-notifications",
       {
-        icon: "./assets/images/Sino.png",
-        color: "#FF0000",
-        mode: "production", // usar 'development' se estiver testando localmente
+        mode: "production",
       },
     ],
     [
@@ -79,7 +82,7 @@ export default ({ config }) => ({
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     eas: {
-      projectId: "b94c12e5-d086-46c1-a641-f399cda2ce70", // ⚡ Project ID do EAS atual
+      projectId: "b94c12e5-d086-46c1-a641-f399cda2ce70",
     },
   },
 

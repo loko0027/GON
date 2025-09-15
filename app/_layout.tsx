@@ -1,31 +1,22 @@
-import { useEffect } from "react";
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { useFrameworkReady } from "@/hooks/useFrameworkReady";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { AppProvider } from "@/contexts/AppContext";
-import * as SplashScreen from "expo-splash-screen";
-import LoadingScreen from "@/components/LoadingScreen";
-import { registerPushToken } from "@/services/notificationService"; // import ajustado
+import { useEffect } from 'react'; 
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { AppProvider } from '@/contexts/AppContext';
+import * as SplashScreen from 'expo-splash-screen';
+import LoadingScreen from '@/components/LoadingScreen';
 
-// Evita que a splash screen desapareça automaticamente
 SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
-  const { loading, user } = useAuth();
+  const { loading } = useAuth();
 
   useEffect(() => {
     if (!loading) {
       SplashScreen.hideAsync();
-
-      if (user) {
-        // Garantir que token do dispositivo esteja registrado
-        registerPushToken(user.id).catch((err) =>
-          console.error("[NOTIFICATIONS] Erro ao registrar token:", err)
-        );
-      }
     }
-  }, [loading, user]);
+  }, [loading]);
 
   if (loading) {
     return <LoadingScreen />;

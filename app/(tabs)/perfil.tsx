@@ -57,10 +57,7 @@ export default function PerfilTab() {
             <View style={styles.statItem}>
               <Target size={16} color="#10B981" />
               <Text style={styles.statValue}>{user.jogos_realizados || 0}</Text>
-              <Text style={styles.statLabel}>
-                {/* ✅ CORREÇÃO APLICADA AQUI */}
-                {user.tipo_usuario === 'organizador' ? 'Convocações' : 'Jogos'}
-              </Text>
+              <Text style={styles.statLabel}>Jogos</Text>
             </View>
 
             {user.tipo_usuario === 'goleiro' && (
@@ -105,7 +102,7 @@ export default function PerfilTab() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>GoleiroON v2.09.02 - Conectando o futebol amador</Text>
+          <Text style={styles.footerText}>GoleiroON v.2.09.06 - Conectando o futebol amador</Text>
         </View>
       </ScrollView>
 
@@ -177,10 +174,10 @@ export default function PerfilTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9' },
+  container: { flex: 1, backgroundColor: '#ffffffff' },
   header: { paddingVertical: 24, paddingHorizontal: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   title: { fontSize: 28, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
-  subtitle: { fontSize: 15, color: '#64748b', letterSpacing: 0.3 },
+  subtitle: { fontSize: 15, color: '#000000ff', letterSpacing: 0.3 },
   profileCard: { backgroundColor: '#fff', margin: 20, borderRadius: 20, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, borderWidth: 1, borderColor: '#f1f5f9' },
   profileHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#a7f3d0' },
@@ -196,5 +193,5 @@ const styles = StyleSheet.create({
   actionItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   actionText: { fontSize: 17, color: '#0f172a', fontWeight: '500' },
   footer: { alignItems: 'center', padding: 20 },
-  footerText: { fontSize: 13, color: '#94a3b8', textAlign: 'center', fontWeight: '500' },
+  footerText: { fontSize: 13, color: '#000000ff', textAlign: 'center', fontWeight: '500' },
 });

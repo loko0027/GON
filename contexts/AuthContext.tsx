@@ -1,10 +1,10 @@
+// context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { Session } from "@supabase/supabase-js";
 import { User } from "@/types";
-import { registerPushToken } from "@/services/notificationService";
 
-// ===== Auth Context =====
+// ===== Contexto =====
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ===== Carrega perfil do usuário =====
+  // ===== Funções do usuário =====
   const loadUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -48,6 +48,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .select("*")
         .eq("id", userId)
         .single();
+
       if (error) throw error;
 
       if (data) {
@@ -75,7 +76,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  // ===== Coins =====
   const adicionarCoins = async (valor: number, descricao: string) => {
     if (!user) throw new Error("Usuário não autenticado");
     try {
@@ -83,7 +83,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .from("usuarios")
         .update({ coins: (user.coins || 0) + valor })
         .eq("id", user.id);
-
       if (updateError) throw updateError;
 
       await supabase.from("transacoes_coins").insert({
@@ -110,7 +109,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .from("usuarios")
         .update({ coins: (user.coins || 0) - valor })
         .eq("id", user.id);
-
       if (updateError) throw updateError;
 
       await supabase.from("transacoes_coins").insert({
@@ -131,35 +129,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // ===== Inicialização =====
   useEffect(() => {
     const initialize = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        setSession(session);
-
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-          await registerPushToken(session.user.id); // ✅ registro centralizado
-        } else {
-          setUser(null);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initialize();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      if (error) console.error("[AUTH] Erro ao obter sessão inicial:", error);
       setSession(session);
 
       if (session?.user) {
         await loadUserProfile(session.user.id);
-        await registerPushToken(session.user.id);
       } else {
         setUser(null);
       }
-    });
+      setLoading(false);
+    };
+
+    initialize();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setSession(session);
+        if (session?.user) {
+          await loadUserProfile(session.user.id);
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
 
     return () => listener?.subscription.unsubscribe();
   }, []);
@@ -175,14 +172,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (error) throw error;
 
       if (data.user) {
-        const profile = await loadUserProfile(data.user.id);
-        if (!profile) throw new Error("Perfil não encontrado");
-        if (profile.status_aprovacao === "rejeitado") {
+        const userProfile = await loadUserProfile(data.user.id);
+        if (!userProfile) throw new Error("Perfil não encontrado");
+        if (userProfile.status_aprovacao === "rejeitado") {
           await supabase.auth.signOut();
           throw new Error("Sua conta foi rejeitada.");
         }
-
-        await registerPushToken(data.user.id); // ✅ registro centralizado
       }
     } finally {
       setLoading(false);
@@ -221,8 +216,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           limite_convocacoes: 2,
         });
         if (profileError) throw profileError;
-
-        await registerPushToken(data.user.id); // ✅ registro centralizado
       }
     } finally {
       setLoading(false);
@@ -246,7 +239,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!user) throw new Error("Usuário não autenticado");
     setLoading(true);
     try {
-      const { error } = await supabase.from("usuarios").update(updates).eq("id", user.id);
+      const { error } = await supabase
+        .from("usuarios")
+        .update(updates)
+        .eq("id", user.id);
       if (error) throw error;
       await loadUserProfile(user.id);
     } finally {

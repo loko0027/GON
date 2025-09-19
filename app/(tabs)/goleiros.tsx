@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, RefreshControl, Modal, FlatList } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
-import { User, Star, Target, Plus, Filter, Search, Calendar, Clock, MapPin, DollarSign } from 'lucide-react-native';
+import { User, Star, Target, Plus, Filter, Search, Calendar, Clock, MapPin, DollarSign, ChevronDown, X } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function GoleirosTab() {
@@ -11,17 +11,24 @@ export default function GoleirosTab() {
   const { criarConvocacao, getSaldo, calcularTaxaConvocacao, calcularValorGoleiro, calcularTaxaApp } = useApp();
 
   const [goleiros, setGoleiros] = useState<any[]>([]);
+  const [locais, setLocais] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingLocais, setLoadingLocais] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchLocalQuery, setSearchLocalQuery] = useState('');
   const [filterByRating, setFilterByRating] = useState('');
   const [showConvocacaoForm, setShowConvocacaoForm] = useState(false);
+  const [showLocaisModal, setShowLocaisModal] = useState(false);
   const [selectedGoleiro, setSelectedGoleiro] = useState<any>(null);
   const [convocacaoData, setConvocacaoData] = useState({
     data: '',
     hora_inicio: '',
     hora_fim: '',
-    local: ''
+    local: '',
+    local_id: null,
+    latitude: null,
+    longitude: null
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -31,7 +38,6 @@ export default function GoleirosTab() {
   const [selectedHoraInicio, setSelectedHoraInicio] = useState<Date | null>(null);
   const [selectedHoraFim, setSelectedHoraFim] = useState<Date | null>(null);
 
-  // ✅ NOVO ESTADO para cálculo em tempo real
   const [valorCalculado, setValorCalculado] = useState<{
     total: number;
     valorGoleiro: number;
@@ -39,6 +45,28 @@ export default function GoleirosTab() {
     taxaDia: number;
     taxaHorario: number;
   } | null>(null);
+
+  // Buscar locais
+  const fetchLocais = async (searchTerm = '') => {
+    setLoadingLocais(true);
+    let query = supabase
+      .from('locais')
+      .select('id, nome, latitude, longitude')
+      .order('nome');
+
+    if (searchTerm) {
+      query = query.ilike('nome', `%${searchTerm}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar locais:', error);
+    } else {
+      setLocais(data || []);
+    }
+    setLoadingLocais(false);
+  };
 
   const fetchGoleiros = async () => {
     setLoading(true);
@@ -51,10 +79,36 @@ export default function GoleirosTab() {
     if (error) {
       console.error('Erro ao buscar goleiros:', error);
     } else {
-      const goleirosComTags = (data || []).map((g) => ({
-        ...g,
-        tags: g.jogos_realizados > 15 ? ['Veterano', 'Confiável'] : ['Promissor']
-      }));
+      const goleirosComTags = (data || []).map((g) => {
+        let tags = [];
+        
+        if (g.nota_media >= 4.5) {
+          tags.push('Elite');
+        } else if (g.nota_media >= 4.0) {
+          tags.push('Veterano');
+        } else if (g.nota_media >= 3.5) {
+          tags.push('Intermediário');
+        } else if (g.nota_media >= 3.0) {
+          tags.push('Promissor');
+        } else {
+          tags.push('Iniciante');
+        }
+
+        if (g.jogos_realizados > 20) {
+          tags.push('Experiente');
+        } else if (g.jogos_realizados > 10) {
+          tags.push('Confiável');
+        }
+
+        if (g.nota_media >= 4.8 && g.jogos_realizados > 15) {
+          tags.push('⭐ Premium');
+        }
+
+        return {
+          ...g,
+          tags: tags
+        };
+      });
       setGoleiros(goleirosComTags);
     }
     setLoading(false);
@@ -68,6 +122,7 @@ export default function GoleirosTab() {
 
   useEffect(() => {
     fetchGoleiros();
+    fetchLocais();
   }, []);
 
   useEffect(() => {
@@ -93,7 +148,6 @@ export default function GoleirosTab() {
     }
   }, [selectedHoraFim]);
 
-  // ✅ NOVO: Calcular valor em tempo real quando dados mudarem
   useEffect(() => {
     if (selectedGoleiro && selectedDate && selectedHoraInicio) {
       calcularValorEmTempoReal();
@@ -109,7 +163,6 @@ export default function GoleirosTab() {
     dataHora.setHours(selectedHoraInicio.getHours());
     dataHora.setMinutes(selectedHoraInicio.getMinutes());
 
-    // Determinar nível do goleiro
     let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
     if (selectedGoleiro.nota_media < 3) {
       nivel = 'iniciante';
@@ -119,14 +172,12 @@ export default function GoleirosTab() {
       nivel = 'veterano';
     }
 
-    // Calcular componentes do valor
     const valorGoleiro = calcularValorGoleiro(nivel, dataHora);
-    const taxaApp = calcularTaxaApp(0); // 5 coins fixos
+    const taxaApp = calcularTaxaApp(0);
     const total = valorGoleiro + taxaApp;
 
-    // Calcular taxas adicionais para exibição
     const diaSemana = dataHora.getDay();
-    const diasValorizados = [0, 1, 5, 6]; // dom, seg, sex, sab
+    const diasValorizados = [0, 1, 5, 6];
     const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
 
     const hora = dataHora.getHours();
@@ -171,7 +222,6 @@ export default function GoleirosTab() {
     return matchesSearch && matchesRating;
   });
 
-  // Alteração aqui: removendo a lógica de verificação de saldo inicial
   const handleConvocar = (goleiro: any) => {
     setSelectedGoleiro(goleiro);
     setShowConvocacaoForm(true);
@@ -192,6 +242,18 @@ export default function GoleirosTab() {
     if (date) setSelectedHoraFim(date);
   };
 
+  const selectLocal = (local: any) => {
+    setConvocacaoData({
+      ...convocacaoData,
+      local: local.nome,
+      local_id: local.id,
+      latitude: local.latitude,
+      longitude: local.longitude
+    });
+    setShowLocaisModal(false);
+    setSearchLocalQuery('');
+  };
+
   const handleSubmitConvocacao = () => {
     if (!valorCalculado) return;
 
@@ -208,7 +270,7 @@ export default function GoleirosTab() {
       return;
     }
 
-    const { data, hora_inicio, hora_fim, local } = convocacaoData;
+    const { data, hora_inicio, hora_fim, local, local_id, latitude, longitude } = convocacaoData;
 
     if (!data || !hora_inicio || !hora_fim || !local) {
       Alert.alert('Erro', 'Preencha todos os campos');
@@ -233,6 +295,9 @@ export default function GoleirosTab() {
       data_hora_inicio: dataInicio,
       data_hora_fim: dataFim,
       local,
+      local_id,
+      latitude,
+      longitude,
       valor_retido: custo,
       status: 'pendente'
     });
@@ -245,13 +310,108 @@ export default function GoleirosTab() {
     );
 
     setShowConvocacaoForm(false);
-    setConvocacaoData({ data: '', hora_inicio: '', hora_fim: '', local: '' });
+    setConvocacaoData({ 
+      data: '', 
+      hora_inicio: '', 
+      hora_fim: '', 
+      local: '', 
+      local_id: null,
+      latitude: null,
+      longitude: null
+    });
     setSelectedGoleiro(null);
     setSelectedDate(null);
     setSelectedHoraInicio(null);
     setSelectedHoraFim(null);
     setValorCalculado(null);
   };
+
+  const renderLocalInput = () => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>Local</Text>
+      <TouchableOpacity
+        style={[styles.input, styles.localInput]}
+        onPress={() => {
+          setShowLocaisModal(true);
+          fetchLocais();
+        }}
+      >
+        <Text style={{ color: convocacaoData.local ? '#374151' : '#9ca3af', fontSize: 14, flex: 1 }}>
+          {convocacaoData.local || 'Selecione um local'}
+        </Text>
+        <ChevronDown size={20} color="#6b7280" />
+      </TouchableOpacity>
+      
+      {convocacaoData.latitude && convocacaoData.longitude && (
+        <Text style={styles.coordenadasText}>
+          📍 Coordenadas: {convocacaoData.latitude.toFixed(6)}, {convocacaoData.longitude.toFixed(6)}
+        </Text>
+      )}
+    </View>
+  );
+
+  const renderLocaisModal = () => (
+    <Modal
+      visible={showLocaisModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowLocaisModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Selecionar Local</Text>
+            <TouchableOpacity onPress={() => setShowLocaisModal(false)}>
+              <X size={24} color="#374151" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.searchContainerModal}>
+            <Search size={20} color="#6b7280" />
+            <TextInput
+              style={styles.searchInputModal}
+              placeholder="Buscar local..."
+              value={searchLocalQuery}
+              onChangeText={(text) => {
+                setSearchLocalQuery(text);
+                fetchLocais(text);
+              }}
+            />
+          </View>
+
+          {loadingLocais ? (
+            <ActivityIndicator size="small" color="#10B981" style={styles.loadingIndicator} />
+          ) : (
+            <FlatList
+              data={locais}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.localItem}
+                  onPress={() => selectLocal(item)}
+                >
+                  <MapPin size={16} color="#10B981" style={styles.localIcon} />
+                  <View style={styles.localInfo}>
+                    <Text style={styles.localNome}>{item.nome}</Text>
+                    {item.latitude && item.longitude && (
+                      <Text style={styles.localCoordenadas}>
+                        📍 {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>
+                  {searchLocalQuery ? 'Nenhum local encontrado' : 'Nenhum local cadastrado'}
+                </Text>
+              }
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (user?.tipo_usuario !== 'organizador' && user?.tipo_usuario !== 'admin') {
     return (
@@ -325,17 +485,9 @@ export default function GoleirosTab() {
             {showHoraFimPicker && <DateTimePicker mode="time" value={selectedHoraFim || new Date()} display="spinner" is24Hour={true} onChange={onChangeHoraFim} />}
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Local</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Digite o local do jogo"
-              value={convocacaoData.local}
-              onChangeText={(text) => setConvocacaoData({ ...convocacaoData, local: text })}
-            />
-          </View>
+          {renderLocalInput()}
+          {renderLocaisModal()}
 
-          {/* ✅ NOVA SEÇÃO: DETALHES DO VALOR CALCULADO */}
           {valorCalculado && (
             <View style={styles.valorDetalhado}>
               <Text style={styles.valorTitulo}>💵 Detalhamento do Valor</Text>
@@ -539,7 +691,6 @@ const styles = StyleSheet.create({
   label: { fontWeight: '500', color: '#0f172a', marginBottom: 4 },
   input: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', fontSize: 14 },
   
-  // ✅ NOVOS ESTILOS para detalhamento do valor
   valorDetalhado: { backgroundColor: '#ffffffff', padding: 12, borderRadius: 8, marginVertical: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   valorTitulo: { fontWeight: '700', color: '#0f172a', marginBottom: 8, fontSize: 16 },
   valorItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
@@ -554,5 +705,86 @@ const styles = StyleSheet.create({
   valorText: { fontWeight: '600', color: '#0f172a', marginBottom: 2 },
   submitButton: { backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 6 },
   submitButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  errorText: { color: '#ef4444', fontSize: 16, textAlign: 'center', marginTop: 24 }
+  errorText: { color: '#ef4444', fontSize: 16, textAlign: 'center', marginTop: 24 },
+
+  localInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  coordenadasText: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  searchContainerModal: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+    height: 40,
+  },
+  searchInputModal: {
+    marginLeft: 6,
+    flex: 1,
+    height: 40,
+  },
+  localItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  localIcon: {
+    marginRight: 12,
+  },
+  localInfo: {
+    flex: 1,
+  },
+  localNome: {
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  localCoordenadas: {
+    fontSize: 10,
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  loadingIndicator: {
+    marginVertical: 20,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#64748b',
+    marginTop: 20,
+  },
 });

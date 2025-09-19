@@ -1,23 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl, Modal, Image } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
-import { Coins, Plus, ArrowUpRight, ArrowDownLeft, CreditCard, Smartphone, FileText, Clock, XCircle, CheckCircle } from 'lucide-react-native';
+import { Coins, Plus, ArrowUpRight, ArrowDownLeft, Smartphone, FileText, Clock, XCircle, CheckCircle } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
+import * as Clipboard from 'expo-clipboard';
 
 export default function CarteiraTab() {
   const { user } = useAuth();
   const { getSaldo, recarregarCoins, solicitarSaque, getRecargasPendentes, aprovarRecarga, rejeitarRecarga, loadData } = useApp();
-  
+
   const [showRecarga, setShowRecarga] = useState(false);
   const [showSaque, setShowSaque] = useState(false);
+  const [showPixModal, setShowPixModal] = useState(false);
   const [valorRecarga, setValorRecarga] = useState('');
   const [valorSaque, setValorSaque] = useState('');
   const [chavePix, setChavePix] = useState('');
-  const [metodoPagamento, setMetodoPagamento] = useState<'pix' | 'cartao' | 'boleto'>('pix');
   const [loadingActions, setLoadingActions] = useState(false);
+  const [pixQrCodeData, setPixQrCodeData] = useState<string | null>(null);
+  const [pixLink, setPixLink] = useState<string | null>(null);
 
   const [historicoRecargas, setHistoricoRecargas] = useState<any[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(true);
@@ -75,15 +78,19 @@ export default function CarteiraTab() {
 
     try {
       setLoadingActions(true);
-      await recarregarCoins({
-        organizador_id: user.id,
-        valor_reais: valor,
-        coins_recebidos: valor,
-        metodo_pagamento: metodoPagamento,
-      });
+      // SIMULAÇÃO: No seu código real, esta parte seria uma chamada à sua API de pagamentos
+      // para gerar o PIX e obter o QR Code e o link.
+      const simulacaoPix = {
+        qrCodeImage: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://github.com/react-native',
+        pixCopyPaste: `00020126580014br.gov.bcb.pix0136e138a2e5-79a0-4c12-87c2-28e67a90f8425204000053039865405${valor}.005802BR5908SEU NOME6009SAO PAULO62070503***6304FC76`,
+      };
+
+      setPixQrCodeData(simulacaoPix.qrCodeImage);
+      setPixLink(simulacaoPix.pixCopyPaste);
       setShowRecarga(false);
+      setShowPixModal(true);
       setValorRecarga('');
-      onRefresh();
+      
     } catch (error) {
       console.error('[CARTEIRA] Erro na recarga:', error);
       Alert.alert('❌ Erro', 'Não foi possível solicitar a recarga.');
@@ -156,6 +163,25 @@ export default function CarteiraTab() {
     } finally {
       setLoadingActions(false);
     }
+  };
+
+  const handleFinalizarPix = () => {
+    setShowPixModal(false);
+    Alert.alert('Pagamento Pendente', 'Sua aprovação será realizada em menos de 15 minutos.');
+    // Aqui você enviaria os dados da transação para o Supabase
+    // para que o admin possa aprová-la manualmente.
+    recarregarCoins({
+      organizador_id: user.id,
+      valor_reais: parseFloat(valorRecarga),
+      coins_recebidos: parseFloat(valorRecarga),
+      metodo_pagamento: 'pix',
+    });
+    onRefresh();
+  };
+
+  const copyToClipboard = async () => {
+    await Clipboard.setStringAsync(pixLink);
+    Alert.alert('Copiado!', 'Link do PIX copiado para a área de transferência.');
   };
 
   const valoresSugeridos = [25, 50, 100, 200];
@@ -289,7 +315,7 @@ export default function CarteiraTab() {
         )}
       </View>
 
-      {/* MODAL DE RECARGA */}
+      {/* MODAL DE RECARGA - AJUSTADO PARA PIX */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -299,7 +325,7 @@ export default function CarteiraTab() {
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>💳 Recarregar Coins</Text>
-            
+
             <View style={styles.valoresSugeridos}>
               <Text style={styles.sectionTitle}>Valores Sugeridos</Text>
               <View style={styles.valoresGrid}>
@@ -331,33 +357,12 @@ export default function CarteiraTab() {
               <Text style={styles.label}>Método de Pagamento</Text>
               <View style={styles.paymentMethods}>
                 <TouchableOpacity
-                  style={[styles.paymentMethod, metodoPagamento === 'pix' && styles.paymentMethodActive]}
-                  onPress={() => setMetodoPagamento('pix')}
-                  disabled={loadingActions}
+                  style={[styles.paymentMethod, styles.paymentMethodActive]}
+                  disabled={true}
                 >
-                  <Smartphone size={20} color={metodoPagamento === 'pix' ? '#10B981' : '#6b7280'} />
-                  <Text style={[styles.paymentMethodText, metodoPagamento === 'pix' && styles.paymentMethodTextActive]}>
+                  <Smartphone size={20} color={'#10B981'} />
+                  <Text style={[styles.paymentMethodText, styles.paymentMethodTextActive]}>
                     PIX
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.paymentMethod, metodoPagamento === 'cartao' && styles.paymentMethodActive]}
-                  onPress={() => setMetodoPagamento('cartao')}
-                  disabled={loadingActions}
-                >
-                  <CreditCard size={20} color={metodoPagamento === 'cartao' ? '#10B981' : '#6b7280'} />
-                  <Text style={[styles.paymentMethodText, metodoPagamento === 'cartao' && styles.paymentMethodTextActive]}>
-                    Cartão
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.paymentMethod, metodoPagamento === 'boleto' && styles.paymentMethodActive]}
-                  onPress={() => setMetodoPagamento('boleto')}
-                  disabled={loadingActions}
-                >
-                  <FileText size={20} color={metodoPagamento === 'boleto' ? '#10B981' : '#6b7280'} />
-                  <Text style={[styles.paymentMethodText, metodoPagamento === 'boleto' && styles.paymentMethodTextActive]}>
-                    Boleto
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -383,7 +388,45 @@ export default function CarteiraTab() {
         </View>
       </Modal>
 
-      {/* MODAL DE SAQUE */}
+      {/* NOVO MODAL DE PIX */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showPixModal}
+        onRequestClose={handleFinalizarPix}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <TouchableOpacity style={styles.closeModalButton} onPress={handleFinalizarPix}>
+              <XCircle size={24} color="#6b7280" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>PIX para Pagamento</Text>
+            
+            {pixQrCodeData && (
+              <View style={styles.qrCodeContainer}>
+                <Image source={{ uri: pixQrCodeData }} style={styles.qrCodeImage} />
+                <Text style={styles.qrCodeText}>Aponte a câmera do seu celular para o QR Code</Text>
+              </View>
+            )}
+
+            {pixLink && (
+              <View style={styles.pixLinkContainer}>
+                <Text style={styles.label}>Chave PIX Copia e Cola</Text>
+                <TextInput
+                  style={styles.input}
+                  value={pixLink}
+                  editable={false}
+                />
+                <TouchableOpacity onPress={copyToClipboard} style={styles.copyButton}>
+                  <Text style={styles.copyButtonText}>Copiar Link</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DE SAQUE - SEM ALTERAÇÕES */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -393,7 +436,7 @@ export default function CarteiraTab() {
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>💸 Sacar Coins</Text>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Valor (coins)</Text>
               <TextInput
@@ -419,7 +462,7 @@ export default function CarteiraTab() {
 
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                ℹ️ O saque será processado em até 24 horas úteis. 
+                ℹ️ O saque será processado em até 24 horas úteis.
                 Valor mínimo: R$ 10
               </Text>
             </View>
@@ -482,7 +525,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
   valoresSugeridos: { marginBottom: 12 },
   sectionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
   valoresGrid: { flexDirection: 'row', gap: 8 },
@@ -521,4 +564,12 @@ const styles = StyleSheet.create({
   historyText: { fontWeight: '600', color: '#111827' },
   historyDate: { fontSize: 10, color: '#6b7280' },
   historyStatus: { width: 60, alignItems: 'center' },
+  // Estilos adicionais para o modal do PIX
+  qrCodeContainer: { alignItems: 'center', marginVertical: 12 },
+  qrCodeImage: { width: 200, height: 200, resizeMode: 'contain' },
+  qrCodeText: { fontSize: 12, color: '#6b7280', marginTop: 8 },
+  pixLinkContainer: { marginTop: 12 },
+  copyButton: { backgroundColor: '#3B82F6', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 8 },
+  copyButtonText: { color: '#fff', fontWeight: '600' },
+  closeModalButton: { position: 'absolute', top: 10, right: 10, zIndex: 1 },
 });

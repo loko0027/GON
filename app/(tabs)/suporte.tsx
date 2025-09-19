@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
     },
     mensagemInicial: {
         marginBottom: 12,
-        backgroundColor: '#000000ff', // Um pouco diferente para destacar
+        backgroundColor: '#ffffffff', // Um pouco diferente para destacar
         padding: 10,
         borderRadius: 8,
     },
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
         marginBottom: 4,
-        color: '#334155',
+        color: '#000000ff',
     },
     mensagemInicialTexto: {
         fontSize: 14,
@@ -771,7 +771,7 @@ const styles = StyleSheet.create({
     },
     inputMensagem: {
         flex: 1,
-        backgroundColor: '#000000ff',
+        backgroundColor: '#ffffffff',
         borderRadius: 24,
         paddingHorizontal: 16,
         paddingVertical: 8,

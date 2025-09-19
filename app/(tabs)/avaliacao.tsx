@@ -62,10 +62,9 @@ export default function AvaliacaoPage() {
     )
     .sort((a, b) => new Date(a.data_hora_inicio).getTime() - new Date(b.data_hora_inicio).getTime());
 
+  // 🔥 Alterado: histórico agora mostra TODAS as convocações finalizadas
   const convocacoesHistorico = minhasConvocacoes
-    .filter(c => 
-      c.status === 'recusado' || c.status === 'cancelado' || c.presenca_status === 'nao_compareceu'
-    )
+    .filter(c => new Date(c.data_hora_fim) < now)
     .sort((a, b) => new Date(b.data_hora_inicio).getTime() - new Date(a.data_hora_inicio).getTime());
 
   const getTituloConvocacao = (convocacao: any) => {
@@ -176,7 +175,6 @@ export default function AvaliacaoPage() {
             <Text style={styles.infoText}>📍 {convocacao.local}</Text>
           </View>
           
-          {/* Exibir valor diretamente no card */}
           {user.tipo_usuario === 'goleiro' ? (
             <View style={styles.valorSection}>
               <Text style={styles.valorText}>💰 Valor Bruto: {convocacao.valor_retido} coins</Text>

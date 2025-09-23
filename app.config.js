@@ -4,8 +4,8 @@ export default ({ config }) => ({
   slug: "goleiroon",
   version: "2.09.06",
   orientation: "portrait",
-  icon: "./assets/images/goleiroon.png",
-  scheme: "myapp",
+  icon: "./assets/images/newicone.png", // ✅ Novo ícone principal
+  scheme: "goleiroon", // melhor que "myapp" para deep linking
   userInterfaceStyle: "automatic",
 
   notification: {
@@ -32,20 +32,19 @@ export default ({ config }) => ({
       "ACCESS_COARSE_LOCATION",
     ],
     adaptiveIcon: {
-      foregroundImage: "./assets/images/goleiroon.png",
+      foregroundImage: "./assets/images/newicone.png", // ✅ Novo ícone adaptativo
       backgroundColor: "#FFFFFF",
     },
     notification: {
       icon: "./assets/images/Sino.png",
       color: "#FF0000",
     },
-    // googleServicesFile removido ✅
   },
 
   web: {
     bundler: "metro",
     output: "single",
-    favicon: "./assets/images/goleiroon.png",
+    favicon: "./assets/images/newicone.png", // ✅ Novo favicon web
   },
 
   plugins: [

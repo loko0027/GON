@@ -1,20 +1,18 @@
-// app/(auth)/_layout.tsx (VERSÃO CORRIGIDA)
+// app/(auth)/_layout.tsx
 
 import { Stack } from 'expo-router';
 
 export default function AuthLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Rota para a tela de login (app/(auth)/login.tsx) */}
+      {/* Tela de login */}
       <Stack.Screen name="login" />
 
-      {/* Rota para a tela de registro (app/(auth)/register.tsx) */}
+      {/* Tela de registro */}
       <Stack.Screen name="register" />
 
-      {/* REMOVIDO: A rota "lista-espera" NÃO pertence a este grupo.
-          Ela é uma rota de nível superior e deve ser declarada APENAS
-          no app/_layout.tsx (o layout raiz). */}
-      {/* <Stack.Screen name="lista-espera" /> */}
+      {/* Tela de termos de uso */}
+      <Stack.Screen name="termos" />
     </Stack>
   );
 }

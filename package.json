@@ -41,6 +41,7 @@
     "lucide-react-native": "^0.475.0",
     "pacote": "^21.0.0",
     "pix-payload": "^1.0.4",
+    "pix-qrcode": "^1.0.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.5",

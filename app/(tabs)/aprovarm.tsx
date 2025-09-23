@@ -1,5 +1,5 @@
-// app/aprovarm.tsx
-import React, { useState } from 'react';
+// app/aprovam.tsx
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,14 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { saquePixService } from '@/services/saquePixService';
+import { SaquePix } from '@/types';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface SaqueToProcess {
   id: string;
@@ -18,12 +24,42 @@ interface SaqueToProcess {
 }
 
 export default function Aprovam() {
-  const { getSaquesPendentes, aprovarSaque, rejeitarSaque } = useApp();
+  const { user } = useAuth();
 
-  const saquesPendentes = getSaquesPendentes();
-
+  const [saquesPendentes, setSaquesPendentes] = useState<SaquePix[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [currentSaqueToProcess, setCurrentSaqueToProcess] = useState<SaqueToProcess | null>(null);
+
+  const fetchSaquesPendentes = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const allSaques = await saquePixService.loadSaques();
+      const pendentes = saquePixService.getSaquesPendentes(allSaques);
+      setSaquesPendentes(pendentes);
+    } catch (error) {
+      console.error('Erro ao buscar saques pendentes:', error);
+      Alert.alert('Erro', 'Não foi possível carregar a lista de saques.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Apenas carrega os dados se o usuário for um administrador
+    if (user?.tipo_usuario === 'admin') {
+      fetchSaquesPendentes();
+    } else {
+      setIsLoading(false);
+    }
+  }, [user, fetchSaquesPendentes]);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchSaquesPendentes();
+    setIsRefreshing(false);
+  }, [fetchSaquesPendentes]);
 
   const openConfirmationModal = (id: string, nome_goleiro: string, action: 'aprovar' | 'rejeitar') => {
     setCurrentSaqueToProcess({ id, nome_goleiro, action });
@@ -37,38 +73,48 @@ export default function Aprovam() {
 
     try {
       if (action === 'aprovar') {
-        await aprovarSaque(id);
-        Alert.alert('Sucesso', `Saque de ${nome_goleiro} aprovado com sucesso.`);
+        // ✅ Chama a função diretamente do serviço
+        await saquePixService.aprovarSaque(id);
       } else {
-        await rejeitarSaque(id);
-        Alert.alert('Sucesso', `Saque de ${nome_goleiro} rejeitado com sucesso.`);
+        // ✅ Chama a função diretamente do serviço
+        await saquePixService.rejeitarSaque(id);
       }
-    } catch (error) {
-      Alert.alert('Erro', `Erro ao ${action} saque.`);
+      await fetchSaquesPendentes(); // Recarrega a lista após a ação
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || `Erro ao ${action} saque.`);
     } finally {
       setIsModalVisible(false);
       setCurrentSaqueToProcess(null);
     }
   };
 
+  if (user?.tipo_usuario !== 'admin') {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.empty}>Acesso negado. Você não tem permissão para visualizar esta tela.</Text>
+      </View>
+    );
+  }
+
   const renderItem = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      <Text style={styles.title}>{item.nome_goleiro}</Text>
+      <Text style={styles.title}>{item.goleiro?.nome}</Text>
       <Text>Coins: {item.valor_coins}</Text>
       <Text>R$: {item.valor_reais.toFixed(2)}</Text>
       <Text>PIX: {item.chave_pix}</Text>
+      <Text style={styles.dateText}>Data: {format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</Text>
 
       <View style={styles.actions}>
         <TouchableOpacity
           style={[styles.button, styles.reject]}
-          onPress={() => openConfirmationModal(item.id, item.nome_goleiro, 'rejeitar')}
+          onPress={() => openConfirmationModal(item.id, item.goleiro?.nome, 'rejeitar')}
         >
           <Text style={styles.buttonText}>Rejeitar</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.button, styles.approve]}
-          onPress={() => openConfirmationModal(item.id, item.nome_goleiro, 'aprovar')}
+          onPress={() => openConfirmationModal(item.id, item.goleiro?.nome, 'aprovar')}
         >
           <Text style={styles.buttonText}>Aprovar</Text>
         </TouchableOpacity>
@@ -80,12 +126,17 @@ export default function Aprovam() {
     <View style={styles.container}>
       <Text style={styles.header}>Saques Pendentes</Text>
 
-      <FlatList
-        data={saquesPendentes}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        ListEmptyComponent={<Text style={styles.empty}>Nenhum saque pendente.</Text>}
-      />
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#059669" style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={saquesPendentes}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={<Text style={styles.empty}>Nenhum saque pendente.</Text>}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        />
+      )}
 
       <Modal
         animationType="fade"
@@ -136,7 +187,6 @@ export default function Aprovam() {
   );
 }
 
-// Estilos do modal
 const modalStyles = StyleSheet.create({
   centeredView: {
     flex: 1,
@@ -198,7 +248,6 @@ const modalStyles = StyleSheet.create({
   },
 });
 
-// Estilos gerais da página
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -229,6 +278,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 6,
     color: '#111827',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
   },
   actions: {
     flexDirection: 'row',

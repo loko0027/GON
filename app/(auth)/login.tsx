@@ -23,11 +23,38 @@ import {
   Eye, 
   EyeOff,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  CheckCircle,
+  Square
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
+
+// Função de simulação — troque pela chamada real ao backend
+const verificarEmailTelefoneExistente = async (email, telefone) => {
+  console.log('[VERIFY] Verificando se email ou telefone já existem:', { email, telefone });
+
+  const dadosDoBanco = [
+    { email: 'teste@teste.com', telefone: '11987654321' },
+    { email: 'user@example.com', telefone: '11999998888' },
+  ];
+
+  const emailExiste = dadosDoBanco.some(user => user.email === email);
+  const telefoneExiste = dadosDoBanco.some(user => user.telefone === telefone);
+
+  if (emailExiste || telefoneExiste) {
+    let mensagemErro = 'Email ou Telefone já existente.';
+    if (emailExiste && telefoneExiste) {
+      mensagemErro = 'Email e Telefone já existentes.';
+    } else if (emailExiste) {
+      mensagemErro = 'Email já existente.';
+    } else if (telefoneExiste) {
+      mensagemErro = 'Telefone já existente.';
+    }
+    throw new Error(mensagemErro);
+  }
+};
 
 export default function AuthPage() {
   const { login, register, loading, user } = useAuth();
@@ -45,6 +72,7 @@ export default function AuthPage() {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [tipoUsuario, setTipoUsuario] = useState<'goleiro' | 'organizador'>('goleiro');
+  const [aceitoTermos, setAceitoTermos] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -90,43 +118,55 @@ export default function AuthPage() {
       Alert.alert('⚠️ Senha inválida', 'A senha deve ter no mínimo 6 caracteres.');
       return;
     }
+    if (!aceitoTermos) {
+      Alert.alert('⚠️ Aceite os termos', 'Você precisa ler e aceitar os termos de uso para continuar.');
+      return;
+    }
     
     try {
+      await verificarEmailTelefoneExistente(email, telefone);
+      
       console.log('[REGISTER] Tentando registrar usuário:', { email, nome, telefone, tipoUsuario });
       await register(email, password, nome, telefone, tipoUsuario);
       Alert.alert('✅ Sucesso', 'Cadastro enviado para aprovação! Você receberá uma notificação quando for aprovado.');
       setIsLogin(true);
-      // Limpar campos
       setNome('');
       setEmail('');
       setTelefone('');
       setPassword('');
       setTipoUsuario('goleiro');
+      setAceitoTermos(false);
     } catch (err: any) {
       console.error('[REGISTER] Erro ao registrar:', err);
-      Alert.alert('❌ Erro de Cadastro', err.message || 'Falha ao registrar. Tente novamente.');
+      if (err.message.includes('existente')) {
+        Alert.alert(
+          '❌ Erro de Cadastro', 
+          `${err.message}. Redefina a senha se a conta for sua.`,
+        );
+      } else {
+        Alert.alert('❌ Erro de Cadastro', err.message || 'Falha ao registrar. Tente novamente.');
+      }
     }
   };
 
   const switchMode = () => {
     setIsLogin(!isLogin);
-    // Limpar campos ao trocar de modo
     setEmail('');
     setPassword('');
     setNome('');
     setTelefone('');
     setTipoUsuario('goleiro');
+    setAceitoTermos(false);
   };
 
   const renderLoginForm = () => (
     <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
       <View style={styles.headerContainer}>
-        {/* Aqui troquei Shield pelo Image e removi o backgroundColor para não ter bolinha atrás */}
         <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
-<Image
-  source={require('@/assets/images/goleiroon.png')}
-  style={{ width: 100, height: 100, resizeMode: 'contain', marginTop: 16 }} 
-/>
+          <Image
+            source={require('@/assets/images/goleiroon.png')}
+            style={{ width: 100, height: 100, resizeMode: 'contain', marginTop: 16 }} 
+          />
         </View>
         <Text style={styles.title}>Bem-vindo de volta! 👋</Text>
         <Text style={styles.subtitle}>Entre na sua conta para continuar sua jornada</Text>
@@ -215,6 +255,7 @@ export default function AuthPage() {
       </View>
 
       <View style={styles.inputContainer}>
+        {/* Nome */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIcon}>
             <User size={22} color="#10b981" />
@@ -228,6 +269,7 @@ export default function AuthPage() {
           />
         </View>
 
+        {/* Email */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIcon}>
             <Mail size={22} color="#10b981" />
@@ -243,6 +285,7 @@ export default function AuthPage() {
           />
         </View>
 
+        {/* Telefone */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIcon}>
             <Phone size={22} color="#10b981" />
@@ -257,6 +300,7 @@ export default function AuthPage() {
           />
         </View>
 
+        {/* Senha */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIcon}>
             <Lock size={22} color="#10b981" />
@@ -282,14 +326,13 @@ export default function AuthPage() {
         </View>
       </View>
 
+      {/* Escolha do perfil */}
       <View style={styles.radioContainer}>
         <Text style={styles.radioLabel}>Escolha seu perfil</Text>
         <View style={styles.radioGroup}>
+          {/* Goleiro */}
           <TouchableOpacity
-            style={[
-              styles.radioOption,
-              tipoUsuario === 'goleiro' && styles.radioSelected
-            ]}
+            style={[styles.radioOption, tipoUsuario === 'goleiro' && styles.radioSelected]}
             onPress={() => setTipoUsuario('goleiro')}
             activeOpacity={0.8}
           >
@@ -298,26 +341,18 @@ export default function AuthPage() {
               style={styles.radioGradient}
             >
               <Text style={styles.radioEmoji}>🧤</Text>
-              <Text style={[
-                styles.radioText,
-                tipoUsuario === 'goleiro' && styles.radioTextSelected
-              ]}>
+              <Text style={[styles.radioText, tipoUsuario === 'goleiro' && styles.radioTextSelected]}>
                 Goleiro
               </Text>
-              <Text style={[
-                styles.radioDesc,
-                tipoUsuario === 'goleiro' && styles.radioDescSelected
-              ]}>
+              <Text style={[styles.radioDesc, tipoUsuario === 'goleiro' && styles.radioDescSelected]}>
                 Receba convocações
               </Text>
             </LinearGradient>
           </TouchableOpacity>
-          
+
+          {/* Organizador */}
           <TouchableOpacity
-            style={[
-              styles.radioOption,
-              tipoUsuario === 'organizador' && styles.radioSelected
-            ]}
+            style={[styles.radioOption, tipoUsuario === 'organizador' && styles.radioSelected]}
             onPress={() => setTipoUsuario('organizador')}
             activeOpacity={0.8}
           >
@@ -326,16 +361,10 @@ export default function AuthPage() {
               style={styles.radioGradient}
             >
               <Text style={styles.radioEmoji}>👥</Text>
-              <Text style={[
-                styles.radioText,
-                tipoUsuario === 'organizador' && styles.radioTextSelected
-              ]}>
+              <Text style={[styles.radioText, tipoUsuario === 'organizador' && styles.radioTextSelected]}>
                 Organizador
               </Text>
-              <Text style={[
-                styles.radioDesc,
-                tipoUsuario === 'organizador' && styles.radioDescSelected
-              ]}>
+              <Text style={[styles.radioDesc, tipoUsuario === 'organizador' && styles.radioDescSelected]}>
                 Convoque goleiros
               </Text>
             </LinearGradient>
@@ -343,10 +372,31 @@ export default function AuthPage() {
         </View>
       </View>
 
+      {/* Checkbox Termos */}
+      <View style={styles.checkboxContainer}>
+        <TouchableOpacity
+          style={styles.checkbox}
+          onPress={() => setAceitoTermos(!aceitoTermos)}
+          activeOpacity={0.8}
+        >
+          {aceitoTermos ? (
+            <CheckCircle size={22} color="#10b981" />
+          ) : (
+            <Square size={22} color="#9ca3af" />
+          )}
+        </TouchableOpacity>
+        <Text style={styles.checkboxText}>
+          Li e aceito os{' '}
+          <Text style={styles.termosLink} onPress={() => router.push('/(auth)/termos')}>
+            Termos de Uso
+          </Text>
+        </Text>
+      </View>
+
       <TouchableOpacity
         style={styles.primaryButton}
         onPress={handleRegister}
-        disabled={loading}
+        disabled={loading || !aceitoTermos}
         activeOpacity={0.8}
       >
         <LinearGradient
@@ -404,9 +454,6 @@ export default function AuthPage() {
           </View>
 
           <View style={styles.footerContainer}>
-            <Text style={styles.footerText}>
-              Ao continuar, você concorda com nossos Termos de Uso
-            </Text>
           </View>
         </ScrollView>
       </LinearGradient>
@@ -415,22 +462,15 @@ export default function AuthPage() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  background: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  background: { flex: 1 },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 40,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
   logo: {
     fontSize: 36,
     fontWeight: '900',
@@ -449,7 +489,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   cardContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 30,
     padding: 30,
     shadowColor: '#000',
@@ -457,15 +497,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 25,
     elevation: 20,
-    backdropFilter: 'blur(10px)',
   },
-  formContainer: {
-    width: '100%',
-  },
-  headerContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
+  formContainer: { width: '100%' },
+  headerContainer: { alignItems: 'center', marginBottom: 30 },
   iconContainer: {
     width: 80,
     height: 80,
@@ -479,25 +513,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 10,
-  },
-  inputContainer: {
-    marginBottom: 25,
-    gap: 16,
-  },
+  title: { fontSize: 28, fontWeight: '800', color: '#1f2937', textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 16, color: '#6b7280', textAlign: 'center', lineHeight: 22, paddingHorizontal: 10 },
+  inputContainer: { marginBottom: 25, gap: 16 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -513,33 +531,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  inputIcon: {
-    marginRight: 15,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1f2937',
-    paddingVertical: 16,
-    fontWeight: '500',
-  },
-  eyeIcon: {
-    padding: 5,
-  },
-  radioContainer: {
-    marginBottom: 25,
-  },
-  radioLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  inputIcon: { marginRight: 15 },
+  input: { flex: 1, fontSize: 16, color: '#1f2937', paddingVertical: 16, fontWeight: '500' },
+  eyeIcon: { padding: 5 },
+  radioContainer: { marginBottom: 25 },
+  radioLabel: { fontSize: 18, fontWeight: '700', color: '#1f2937', marginBottom: 15, textAlign: 'center' },
+  radioGroup: { flexDirection: 'row', gap: 12 },
   radioOption: {
     flex: 1,
     borderRadius: 20,
@@ -550,36 +547,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  radioSelected: {
-    transform: [{ scale: 1.02 }],
-  },
-  radioGradient: {
-    padding: 20,
-    alignItems: 'center',
-    minHeight: 120,
-    justifyContent: 'center',
-  },
-  radioEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  radioText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  radioTextSelected: {
-    color: '#ffffff',
-  },
-  radioDesc: {
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  radioDescSelected: {
-    color: '#e2e8f0',
-  },
+  radioSelected: { transform: [{ scale: 1.02 }] },
+  radioGradient: { padding: 20, alignItems: 'center', minHeight: 120, justifyContent: 'center' },
+  radioEmoji: { fontSize: 32, marginBottom: 8 },
+  radioText: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 4 },
+  radioTextSelected: { color: '#fff' },
+  radioDesc: { fontSize: 12, color: '#6b7280', textAlign: 'center' },
+  radioDescSelected: { color: '#e2e8f0' },
   primaryButton: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -590,42 +564,15 @@ const styles = StyleSheet.create({
     elevation: 8,
     marginBottom: 20,
   },
-  gradientButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 30,
-    gap: 10,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  switchButton: {
-    alignItems: 'center',
-    paddingVertical: 15,
-  },
-  switchText: {
-    fontSize: 16,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  switchLink: {
-    color: '#6366f1',
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-  footerContainer: {
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#e2e8f0',
-    textAlign: 'center',
-    opacity: 0.8,
-  },
+  gradientButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18, paddingHorizontal: 30, gap: 10 },
+  primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 },
+  switchButton: { alignItems: 'center', paddingVertical: 15 },
+  switchText: { fontSize: 16, color: '#6b7280', fontWeight: '500' },
+  switchLink: { color: '#6366f1', fontWeight: '700', textDecorationLine: 'underline' },
+  footerContainer: { alignItems: 'center', marginTop: 30 },
+  footerText: { fontSize: 12, color: '#e2e8f0', textAlign: 'center', opacity: 0.8 },
+  checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, justifyContent: 'center' },
+  checkbox: { marginRight: 10 },
+  checkboxText: { fontSize: 14, color: '#6b7280' },
+  termosLink: { color: '#10b981', fontWeight: '700', textDecorationLine: 'underline' },
 });

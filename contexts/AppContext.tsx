@@ -56,6 +56,8 @@ interface AppContextType {
   avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
   avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
   confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
+  naoCompareceu: (convocacaoId: string) => Promise<void>;
+  finalizarConvocacao: (convocacaoId: string) => Promise<void>;
   getConvocacoesPorUsuario: (userId: string) => Convocacao[];
   getConvocacoesAtivas: () => Convocacao[];
   getConvocacoesHistorico: () => Convocacao[];
@@ -171,6 +173,9 @@ export function AppProvider({ children }: AppProviderProps) {
     return valorGoleiro + taxaApp;
   }, [calcularValorGoleiro, calcularTaxaApp]);
 
+  // ==================== NOVA LÓGICA DE CONVOCAÇÕES ====================
+
+  // Buscar convocações
   const fetchConvocacoes = useCallback(async (): Promise<Convocacao[]> => {
     try {
       if (!user) {
@@ -187,7 +192,7 @@ export function AppProvider({ children }: AppProviderProps) {
           avaliacoes_goleiro:avaliacoes_goleiro(*),
           avaliacoes_organizador:avaliacoes_organizador(*)
         `)
-        .order('data_hora_inicio', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -207,6 +212,121 @@ export function AppProvider({ children }: AppProviderProps) {
       return [];
     }
   }, [user]);
+
+  // ----------------- FUNÇÕES DE FLUXO -----------------
+
+  // Aceitar
+  const aceitarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
+    try {
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ status: 'aceita' })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await fetchConvocacoes();
+      Alert.alert('Sucesso', 'Convocação aceita com sucesso!');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível aceitar a convocação');
+    }
+  }, [user, fetchConvocacoes]);
+
+  // Recusar (status final, não vira perdida)
+  const recusarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ status: 'recusada' })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await fetchConvocacoes();
+      Alert.alert('Sucesso', 'Convocação recusada com sucesso!');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível recusar a convocação');
+    }
+  }, [fetchConvocacoes]);
+
+  // Confirmar presença (só pode se já tiver aceitado)
+  const confirmarPresenca = useCallback(async (convocacaoId: string): Promise<void> => {
+    try {
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ status: 'compareceu' })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await fetchConvocacoes();
+      Alert.alert('Sucesso', 'Presença confirmada com sucesso!');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível confirmar a presença');
+    }
+  }, [user, fetchConvocacoes]);
+
+  // Não compareceu (aceitou mas não foi → perdida)
+  const naoCompareceu = useCallback(async (convocacaoId: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ status: 'perdida' })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await fetchConvocacoes();
+      Alert.alert('Sucesso', 'Status atualizado para não compareceu!');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível atualizar o status');
+    }
+  }, [fetchConvocacoes]);
+
+  // Finalizar jogo (só depois de compareceu)
+  const finalizarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('convocacoes')
+        .update({ status: 'concluida' })
+        .eq('id', convocacaoId);
+
+      if (error) throw error;
+
+      await fetchConvocacoes();
+      Alert.alert('Sucesso', 'Convocação finalizada com sucesso!');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível finalizar a convocação');
+    }
+  }, [fetchConvocacoes]);
+
+  // ----------------- VERIFICAÇÃO DE EXPIRAÇÃO -----------------
+  const verificarExpiradas = useCallback(async () => {
+    try {
+      const agora = new Date();
+      for (const c of convocacoes) {
+        if (c.status === 'pendente') {
+          const criada = new Date(c.created_at);
+          const diffMin = (agora.getTime() - criada.getTime()) / 60000;
+          if (diffMin >= 30) {
+            await supabase
+              .from('convocacoes')
+              .update({ status: 'perdida' })
+              .eq('id', c.id);
+          }
+        }
+      }
+      await fetchConvocacoes();
+    } catch (error) {
+      console.error('Erro ao verificar convocações expiradas:', error);
+    }
+  }, [convocacoes, fetchConvocacoes]);
+
+  // ==================== FIM DA NOVA LÓGICA DE CONVOCAÇÕES ====================
 
   const loadSaldos = useCallback(async (): Promise<void> => {
     try {
@@ -391,6 +511,36 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [user, authLoading, loadData, clearAllAppDataStates]);
 
+  // ==================== REAL-TIME E VERIFICAÇÃO DE EXPIRAÇÃO ====================
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Realtime para convocações
+    const subscription = supabase
+      .channel('convocacoes-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'convocacoes' },
+        () => {
+          fetchConvocacoes();
+        }
+      )
+      .subscribe();
+
+    // Checar expiradas a cada 1 minuto
+    const intervalo = setInterval(() => {
+      verificarExpiradas();
+    }, 60000);
+
+    return () => {
+      supabase.removeChannel(subscription);
+      clearInterval(intervalo);
+    };
+  }, [user, fetchConvocacoes, verificarExpiradas]);
+
+  // ==================== FUNÇÕES MANTIDAS (RESTANTE DO CÓDIGO) ====================
+
   const getSaldo = useCallback((userId: string): Saldo => {
     return saldos.find(s => s.usuario_id === userId) || { 
       usuario_id: userId, 
@@ -414,7 +564,6 @@ export function AppProvider({ children }: AppProviderProps) {
     return allAppUsers.filter(u => u.status_aprovacao === 'pendente');
   }, [allAppUsers]);
 
-  // ✅ FUNÇÕES CORRIGIDAS PARA APROVAR/REJEITAR USUÁRIOS
   const aprovarUsuario = useCallback(async (userId: string): Promise<void> => {
     try {
       const { error } = await supabase
@@ -428,7 +577,6 @@ export function AppProvider({ children }: AppProviderProps) {
         message: 'Sua conta foi aprovada! Agora você pode usar todos os recursos do app.'
       });
 
-      // ✅ ATUALIZA A LISTA DE USUÁRIOS APÓS A MUDANÇA
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário aprovado com sucesso!');
     } catch (e) {
@@ -449,7 +597,6 @@ export function AppProvider({ children }: AppProviderProps) {
         message: 'Sua conta foi rejeitada. Entre em contato conosco para mais informações.'
       });
 
-      // ✅ ATUALIZA A LISTA DE USUÁRIOS APÓS A MUDANÇA
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário rejeitado.');
     } catch (e) {
@@ -531,71 +678,6 @@ export function AppProvider({ children }: AppProviderProps) {
       Alert.alert('Erro', error.message || 'Não foi possível criar a convocação');
     }
   }, [user, getSaldoUsuario, loadData]);
-
-  const aceitarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
-    try {
-      if (!user) throw new Error('Usuário não autenticado');
-
-      const convocacao = convocacoes.find(c => c.id === convocacaoId);
-      if (!convocacao) throw new Error('Convocação não encontrada');
-
-      const { error } = await supabase
-        .from('convocacoes')
-        .update({
-          status: 'aceito',
-          goleiro_id: user.id
-        })
-        .eq('id', convocacaoId);
-
-      if (error) throw error;
-
-      await sendPushNotification(convocacao.organizador_id, 'convocacao_aceita', {
-        goleiroNome: user.nome,
-        valor: convocacao.valor_retido,
-        convocacaoId
-      });
-
-      await loadData();
-      Alert.alert('Sucesso', 'Convocação aceita com sucesso!');
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível aceitar a convocação');
-    }
-  }, [user, convocacoes, loadData]);
-
-  const recusarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
-    try {
-      const convocacao = convocacoes.find(c => c.id === convocacaoId);
-      if (!convocacao) throw new Error('Convocação não encontrada');
-
-      const { error } = await supabase
-        .from('convocacoes')
-        .update({ status: 'recusado' })
-        .eq('id', convocacaoId);
-
-      if (error) throw error;
-
-      const saldoOrganizador = getSaldo(convocacao.organizador_id);
-      if (saldoOrganizador) {
-        await supabase
-          .from('saldos')
-          .update({
-            saldo_coins: saldoOrganizador.saldo_coins + convocacao.valor_retido,
-            saldo_retido: saldoOrganizador.saldo_retido - convocacao.valor_retido
-          })
-          .eq('usuario_id', convocacao.organizador_id);
-      }
-
-      await sendPushNotification(convocacao.organizador_id, 'convocacao_recusada', {
-        goleiroNome: user?.nome || 'Goleiro',
-        convocacaoId
-      });
-
-      await loadData();
-      Alert.alert('Sucesso', 'Convocação recusada com sucesso!');
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível recusar a convocação');
-    }
-  }, [convocacoes, getSaldo, loadData, user]);
 
   const avaliarGoleiro = useCallback(async (convocacaoId: string, nota: number): Promise<void> => {
     try {
@@ -693,40 +775,6 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [user, convocacoes, loadData]);
 
-  const confirmarPresenca = useCallback(async (
-    convocacaoId: string, 
-    status: 'compareceu' | 'nao_compareceu'
-  ): Promise<void> => {
-    try {
-      if (!user) throw new Error('Usuário não autenticado');
-
-      const convocacao = convocacoes.find(c => c.id === convocacaoId);
-      if (!convocacao) throw new Error('Convocação não encontrada');
-      if (convocacao.organizador_id !== user.id) throw new Error('Apenas o organizador pode confirmar presença');
-
-      const { error } = await supabase
-        .from('convocacoes')
-        .update({ presenca_status: status })
-        .eq('id', convocacaoId);
-
-      if (error) throw error;
-
-      if (convocacao.goleiro_id) {
-        await sendPushNotification(convocacao.goleiro_id, 'presenca_confirmada', {
-          status,
-          coins: convocacao.valor_retido,
-          convocacaoId,
-          organizador: user.nome
-        });
-      }
-
-      await loadData();
-      Alert.alert('Sucesso', `Presença confirmada como: ${status}`);
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível confirmar a presença');
-    }
-  }, [user, convocacoes, loadData]);
-
   const getConvocacoesPorUsuario = useCallback((userId: string): Convocacao[] => {
     return convocacoes.filter(c => 
       c.organizador_id === userId || c.goleiro_id === userId
@@ -736,7 +784,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const getConvocacoesAtivas = useCallback((): Convocacao[] => {
     const now = new Date();
     return convocacoes.filter(c => 
-      (c.status === 'pendente' || c.status === 'aceito') &&
+      (c.status === 'pendente' || c.status === 'aceita') &&
       new Date(c.data_hora_fim) > now
     );
   }, [convocacoes]);
@@ -744,8 +792,8 @@ export function AppProvider({ children }: AppProviderProps) {
   const getConvocacoesHistorico = useCallback((): Convocacao[] => {
     const now = new Date();
     return convocacoes.filter(c => 
-      c.status === 'recusado' || c.status === 'cancelado' || 
-      (new Date(c.data_hora_fim) < now && c.status === 'aceito')
+      c.status === 'recusada' || c.status === 'cancelado' || 
+      (new Date(c.data_hora_fim) < now && c.status === 'aceita')
     );
   }, [convocacoes]);
 
@@ -1261,6 +1309,8 @@ export function AppProvider({ children }: AppProviderProps) {
     avaliarGoleiro,
     avaliarOrganizador,
     confirmarPresenca,
+    naoCompareceu,
+    finalizarConvocacao,
     getConvocacoesPorUsuario,
     getConvocacoesAtivas,
     getConvocacoesHistorico,
@@ -1320,6 +1370,8 @@ export function AppProvider({ children }: AppProviderProps) {
     avaliarGoleiro,
     avaliarOrganizador,
     confirmarPresenca,
+    naoCompareceu,
+    finalizarConvocacao,
     getConvocacoesPorUsuario,
     getConvocacoesAtivas,
     getConvocacoesHistorico,

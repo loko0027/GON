@@ -2,18 +2,15 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
-import { Star, Tag, CircleCheck as CheckCircle, Circle as XCircle, Megaphone, UserCheck, UserX, Info } from 'lucide-react-native';
+import { Star, Tag, UserCheck, UserX, Megaphone } from 'lucide-react-native';
 import RatingModal from '@/components/RatingModal';
 import TagSelectionModal from '@/components/TagSelectionModal';
-import { useRouter } from 'expo-router';
+import ConvocacaoCard from '@/components/ConvocacaoCard'; // 1. Importamos o novo componente
 
 export default function AvaliacaoPage() {
-  const router = useRouter();
   const { user } = useAuth();
   const { 
     convocacoes, 
-    aceitarConvocacao, 
-    recusarConvocacao, 
     avaliarGoleiro, 
     avaliarOrganizador, 
     categorias, 
@@ -21,7 +18,6 @@ export default function AvaliacaoPage() {
     isGoleiroAvaliado,
     isOrganizadorAvaliado,
     fetchConvocacoes,
-    calcularTaxaApp
   } = useApp();
 
   const [avaliando, setAvaliando] = useState<string | null>(null);
@@ -39,14 +35,8 @@ export default function AvaliacaoPage() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      await fetchConvocacoes();
-    } catch (error) {
-      console.error('Erro ao atualizar convocações:', error);
-      Alert.alert('Erro', 'Não foi possível atualizar as convocações.');
-    } finally {
-      setRefreshing(false);
-    }
+    await fetchConvocacoes();
+    setRefreshing(false);
   }, [fetchConvocacoes]);
 
   const minhasConvocacoes = convocacoes.filter(c =>
@@ -56,37 +46,14 @@ export default function AvaliacaoPage() {
   const now = new Date();
 
   const convocacoesAtuais = minhasConvocacoes
-    .filter(c => 
-      (c.status === 'pendente' || c.status === 'aceito') &&
-      !(new Date(c.data_hora_fim) < now && (isGoleiroAvaliado(c.id) || isOrganizadorAvaliado(c.id)))
-    )
+    .filter(c => (c.status === 'pendente' || c.status === 'aceito'))
     .sort((a, b) => new Date(a.data_hora_inicio).getTime() - new Date(b.data_hora_inicio).getTime());
 
-  // 🔥 Alterado: histórico agora mostra TODAS as convocações finalizadas
   const convocacoesHistorico = minhasConvocacoes
-    .filter(c => new Date(c.data_hora_fim) < now)
+    .filter(c => (c.status !== 'pendente' && c.status !== 'aceito'))
     .sort((a, b) => new Date(b.data_hora_inicio).getTime() - new Date(a.data_hora_inicio).getTime());
 
-  const getTituloConvocacao = (convocacao: any) => {
-    switch (convocacao.status) {
-      case 'pendente': return user.tipo_usuario === 'goleiro' ? 'Convocação Recebida' : 'Convocação Enviada';
-      case 'aceito': return 'Convocação Aceita';
-      case 'recusado': return 'Convocação Recusada';
-      case 'cancelado': return 'Convocação Cancelada';
-      default: return 'Convocação';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pendente': return '#D97706';
-      case 'aceito': return '#10B981';
-      case 'recusado': return '#EF4444';
-      case 'cancelado': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
-
+  // As funções de ação (handlers) continuam aqui pois são específicas desta tela
   const handleAvaliarGoleiro = (convocacaoId: string) => {
     setCurrentConvocacaoIdToRate(convocacaoId);
     setShowRatingModal(true);
@@ -95,15 +62,11 @@ export default function AvaliacaoPage() {
   const onRateGoleiro = async (nota: number) => {
     if (!currentConvocacaoIdToRate) return;
     setAvaliando(currentConvocacaoIdToRate);
-
-    const label = LABELS[nota - 1] ?? `${nota} estrelas`;
-
     try {
       await avaliarGoleiro(currentConvocacaoIdToRate, nota);
-      Alert.alert('Sucesso', `Avaliação do goleiro enviada: ${label}`);
-    } catch (error: any) {
-      console.error('Erro ao avaliar goleiro:', error);
-      Alert.alert('Erro', 'Não foi possível registrar a avaliação. Tente novamente mais tarde.');
+      Alert.alert('Sucesso', `Avaliação enviada: ${LABELS[nota - 1]}`);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível registrar a avaliação.');
     } finally {
       setAvaliando(null);
       setShowRatingModal(false);
@@ -117,18 +80,16 @@ export default function AvaliacaoPage() {
   };
 
   const onSelectOrganizadorTag = async (tagName: string) => {
-    if (currentConvocacaoIdToTag) {
-      setAvaliando(currentConvocacaoIdToTag);
-      try {
-        await avaliarOrganizador(currentConvocacaoIdToTag, tagName);
-      } catch (error) {
-        console.error('Erro ao avaliar organizador:', error);
-        Alert.alert('Erro', 'Não foi possível registrar a avaliação do organizador.');
-      } finally {
-        setAvaliando(null);
-        setShowTagSelectionModal(false);
-        setCurrentConvocacaoIdToTag(null);
-      }
+    if (!currentConvocacaoIdToTag) return;
+    setAvaliando(currentConvocacaoIdToTag);
+    try {
+      await avaliarOrganizador(currentConvocacaoIdToTag, tagName);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível avaliar o organizador.');
+    } finally {
+      setAvaliando(null);
+      setShowTagSelectionModal(false);
+      setCurrentConvocacaoIdToTag(null);
     }
   };
 
@@ -137,139 +98,13 @@ export default function AvaliacaoPage() {
     try {
       await confirmarPresenca(convocacaoId, status);
     } catch (error) {
-      console.error('Erro ao confirmar presença:', error);
       Alert.alert('Erro', 'Não foi possível atualizar presença.');
     } finally {
       setConfirmando(null);
     }
   };
 
-  const renderConvocacao = (convocacao: any) => {
-    const dataInicio = new Date(convocacao.data_hora_inicio);
-    const dataFim = new Date(convocacao.data_hora_fim);
-    const isPassado = dataFim < now;
-
-    const jaAvaliouGoleiro = isGoleiroAvaliado(convocacao.id);
-    const jaAvaliouOrganizador = isOrganizadorAvaliado(convocacao.id);
-
-    // Calcular taxa e valor líquido (apenas para goleiros)
-    const taxaApp = calcularTaxaApp(convocacao.valor_retido);
-    const valorLiquido = convocacao.valor_retido - taxaApp;
-
-    return (
-      <View key={convocacao.id} style={styles.convocacaoCard}>
-        <View style={styles.convocacaoHeader}>
-          <Text style={styles.convocacaoTitle}>{getTituloConvocacao(convocacao)}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(convocacao.status) }]}>
-            <Text style={styles.statusText}>{convocacao.status.toUpperCase()}</Text>
-          </View>
-        </View>
-
-        <View style={styles.convocacaoInfo}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoText}>
-              📅 {dataInicio.toLocaleDateString()} - {dataInicio.toLocaleTimeString()} às {dataFim.toLocaleTimeString()}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoText}>📍 {convocacao.local}</Text>
-          </View>
-          
-          {user.tipo_usuario === 'goleiro' ? (
-            <View style={styles.valorSection}>
-              <Text style={styles.valorText}>💰 Valor Bruto: {convocacao.valor_retido} coins</Text>
-              <Text style={styles.taxaText}>🔴 Taxa do App: {taxaApp} coins</Text>
-              <Text style={styles.taxaText}>🟢 Valor Líquido: {valorLiquido} coins</Text>
-            </View>
-          ) : (
-            <View style={styles.infoRow}>
-              <Text style={styles.valorText}>💰 {convocacao.valor_retido} coins</Text>
-            </View>
-          )}
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoText}>
-              {user.tipo_usuario === 'organizador' ? 
-                `Goleiro: ${convocacao.goleiro_nome || 'Não atribuído'}` : 
-                `Organizador: ${convocacao.organizador_nome}`
-              }
-            </Text>
-          </View>
-        </View>
-
-        {user.tipo_usuario === 'goleiro' && convocacao.status === 'pendente' && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={[styles.button, styles.acceptButton]} onPress={() => aceitarConvocacao(convocacao.id)} activeOpacity={0.8}>
-              <CheckCircle size={16} color="#fff" />
-              <Text style={styles.buttonText}>Aceitar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.rejectButton]} onPress={() => recusarConvocacao(convocacao.id)} activeOpacity={0.8}>
-              <XCircle size={16} color="#fff" />
-              <Text style={styles.buttonText}>Recusar</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {isPassado && convocacao.status === 'aceito' && (
-          <View style={styles.avaliacaoSection}>
-            {user.tipo_usuario === 'organizador' && convocacao.presenca_status == null && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.button, styles.acceptButton, confirmando === convocacao.id && styles.buttonDisabled]}
-                  onPress={() => handleConfirmarPresenca(convocacao.id, 'compareceu')} disabled={confirmando === convocacao.id} activeOpacity={0.8}>
-                  <UserCheck size={16} color="#fff" />
-                  <Text style={styles.buttonText}>{confirmando === convocacao.id ? 'Confirmando...' : 'Confirmar Presença'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.button, styles.rejectButton, confirmando === convocacao.id && styles.buttonDisabled]}
-                  onPress={() => handleConfirmarPresenca(convocacao.id, 'nao_compareceu')} disabled={confirmando === convocacao.id} activeOpacity={0.8}>
-                  <UserX size={16} color="#fff" />
-                  <Text style={styles.buttonText}>{confirmando === convocacao.id ? 'Marcando...' : 'Marcar Ausente'}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {convocacao.presenca_status === 'compareceu' && (
-              <>
-                {user.tipo_usuario === 'organizador' && !jaAvaliouGoleiro && (
-                  <TouchableOpacity style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
-                    onPress={() => handleAvaliarGoleiro(convocacao.id)} disabled={avaliando === convocacao.id} activeOpacity={0.8}>
-                    <Star size={16} color="#fff" />
-                    <Text style={styles.buttonText}>{avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Goleiro'}</Text>
-                  </TouchableOpacity>
-                )}
-
-                {user.tipo_usuario === 'goleiro' && !jaAvaliouOrganizador && (
-                  <TouchableOpacity style={[styles.button, styles.avaliarButton, avaliando === convocacao.id && styles.buttonDisabled]}
-                    onPress={() => handleAvaliarOrganizador(convocacao.id)} disabled={avaliando === convocacao.id} activeOpacity={0.8}>
-                    <Tag size={16} color="#fff" />
-                    <Text style={styles.buttonText}>{avaliando === convocacao.id ? 'Avaliando...' : 'Avaliar Organizador'}</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-
-            {jaAvaliouGoleiro && (
-              <View style={styles.avaliacaoInfo}>
-                <Text style={styles.avaliacaoText}>⭐ Você já avaliou este goleiro</Text>
-              </View>
-            )}
-
-            {jaAvaliouOrganizador && (
-              <View style={styles.avaliacaoInfo}>
-                <Text style={styles.avaliacaoText}>🏷️ Você já avaliou este organizador</Text>
-              </View>
-            )}
-
-            {user.tipo_usuario === 'organizador' && !jaAvaliouGoleiro && convocacao.presenca_status === 'compareceu' && (
-              <Text style={styles.pendingReviewText}>Aguardando sua avaliação do goleiro</Text>
-            )}
-            {user.tipo_usuario === 'goleiro' && !jaAvaliouOrganizador && convocacao.presenca_status === 'compareceu' && (
-              <Text style={styles.pendingReviewText}>Aguardando sua avaliação do organizador</Text>
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
+  // 2. A função de renderizar foi removida. Agora usamos o componente diretamente no JSX.
 
   return (
     <ScrollView
@@ -280,85 +115,81 @@ export default function AvaliacaoPage() {
       <View style={styles.header}>
         <Megaphone size={24} color="#3B82F6" />
         <View style={{ marginLeft: 12 }}>
-          <Text style={styles.headerTitle}>Avaliação de desempenho</Text>
-          <Text style={styles.headerSubtitle}>Avalie o goleiro e seu desempenho em seu jogo!</Text>
+          <Text style={styles.headerTitle}>Minhas Convocações</Text>
+          <Text style={styles.headerSubtitle}>Gerencie seus jogos e avaliações</Text>
         </View>
       </View>
 
       {minhasConvocacoes.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Nenhuma convocação para avaliar.</Text>
-        </View>
+        <View style={styles.emptyState}><Text style={styles.emptyText}>Nenhuma convocação encontrada.</Text></View>
       ) : (
         <>
-          {convocacoesAtuais.map(renderConvocacao)}
-
+          {convocacoesAtuais.map(convocacao => {
+            const isPassado = new Date(convocacao.data_hora_fim) < now;
+            return (
+              <View key={convocacao.id}>
+                <ConvocacaoCard convocacao={convocacao} />
+                
+                {/* BOTÕES DE AÇÃO ESPECÍFICOS DESTA TELA */}
+                {isPassado && convocacao.status === 'aceito' && (
+                  <View style={styles.actionSection}>
+                    {user.tipo_usuario === 'organizador' && convocacao.presenca_status == null && (
+                      <View style={styles.actionButtons}>
+                        <TouchableOpacity style={[styles.button, styles.acceptButton]} onPress={() => handleConfirmarPresenca(convocacao.id, 'compareceu')}><UserCheck size={16} color="#fff" /><Text style={styles.buttonText}>Confirmar Presença</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.button, styles.rejectButton]} onPress={() => handleConfirmarPresenca(convocacao.id, 'nao_compareceu')}><UserX size={16} color="#fff" /><Text style={styles.buttonText}>Marcar Ausente</Text></TouchableOpacity>
+                      </View>
+                    )}
+                    {convocacao.presenca_status === 'compareceu' && (
+                      <>
+                        {user.tipo_usuario === 'organizador' && !isGoleiroAvaliado(convocacao.id) && (
+                          <TouchableOpacity style={[styles.button, styles.avaliarButton]} onPress={() => handleAvaliarGoleiro(convocacao.id)}><Star size={16} color="#fff" /><Text style={styles.buttonText}>Avaliar Goleiro</Text></TouchableOpacity>
+                        )}
+                        {user.tipo_usuario === 'goleiro' && !isOrganizadorAvaliado(convocacao.id) && (
+                          <TouchableOpacity style={[styles.button, styles.avaliarButton]} onPress={() => handleAvaliarOrganizador(convocacao.id)}><Tag size={16} color="#fff" /><Text style={styles.buttonText}>Avaliar Organizador</Text></TouchableOpacity>
+                        )}
+                      </>
+                    )}
+                    {isGoleiroAvaliado(convocacao.id) && <View style={styles.avaliacaoInfo}><Text style={styles.avaliacaoText}>⭐ Você já avaliou este goleiro</Text></View>}
+                    {isOrganizadorAvaliado(convocacao.id) && <View style={styles.avaliacaoInfo}><Text style={styles.avaliacaoText}>🏷️ Você já avaliou este organizador</Text></View>}
+                  </View>
+                )}
+              </View>
+            )
+          })}
+          
           {convocacoesHistorico.length > 0 && (
             <TouchableOpacity style={styles.historicoToggle} onPress={() => setShowHistorico(!showHistorico)}>
-              <Text style={styles.historicoToggleText}>
-                {showHistorico ? 'Ocultar Histórico de Convocações' : 'Mostrar Histórico de Convocações'}
-              </Text>
+              <Text style={styles.historicoToggleText}>{showHistorico ? 'Ocultar Histórico' : 'Mostrar Histórico'}</Text>
             </TouchableOpacity>
           )}
-
-          {showHistorico && (
-            <View style={{ marginTop: 20 }}>
-              {convocacoesHistorico.map(renderConvocacao)}
-            </View>
-          )}
+          {showHistorico && convocacoesHistorico.map(convocacao => <ConvocacaoCard key={convocacao.id} convocacao={convocacao} />)}
         </>
       )}
 
-      <RatingModal
-        isVisible={showRatingModal}
-        onClose={() => { setShowRatingModal(false); setCurrentConvocacaoIdToRate(null); }}
-        onRate={onRateGoleiro}
-        title="Avaliar Goleiro"
-        message="Escolha uma nota:"
-        options={[{ nota: 1 }, { nota: 2 }, { nota: 3 }, { nota: 4 }, { nota: 5 }]}
-      />
-
-      <TagSelectionModal
-        isVisible={showTagSelectionModal}
-        onClose={() => { setShowTagSelectionModal(false); setCurrentConvocacaoIdToTag(null); }}
-        onSelectTag={onSelectOrganizadorTag}
-        title="Avaliar Organizador"
-        message="Escolha uma tag:"
-        options={categorias}
-      />
+      <RatingModal isVisible={showRatingModal} onClose={() => setShowRatingModal(false)} onRate={onRateGoleiro} title="Avaliar Goleiro" message="Escolha uma nota:" options={LABELS.map((_, i) => ({ nota: i + 1 }))}/>
+      <TagSelectionModal isVisible={showTagSelectionModal} onClose={() => setShowTagSelectionModal(false)} onSelectTag={onSelectOrganizadorTag} title="Avaliar Organizador" message="Escolha uma tag:" options={categorias}/>
     </ScrollView>
   );
 }
 
+// Os estilos que sobraram, específicos da página
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffffff' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 },
   headerTitle: { fontSize: 26, fontWeight: '700', color: '#040405ff' },
   headerSubtitle: { fontSize: 15, fontWeight: '400', color: '#000000ff', marginTop: 2 },
-  convocacaoCard: { backgroundColor: '#ffffffff', borderRadius: 16, padding: 20, marginHorizontal: 20, marginBottom: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
-  convocacaoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  convocacaoTitle: { fontSize: 17, fontWeight: '600', color: '#000000ff' },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, minWidth: 80, alignItems: 'center' },
-  statusText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF', textTransform: 'uppercase' },
-  convocacaoInfo: { marginBottom: 14, gap: 10 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  infoText: { fontSize: 15, color: '#000000ff' },
-  valorText: { fontSize: 15, fontWeight: '600', color: '#10B981' },
-  valorSection: { marginTop: 8 },
-  taxaText: { fontSize: 13, color: '#000000ff' },
-  actionButtons: { flexDirection: 'row', gap: 14, marginTop: 14 },
+  actionSection: { marginTop: -10, marginBottom: 18, paddingHorizontal: 20 },
+  avaliacaoSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB', gap: 10 },
+  actionButtons: { flexDirection: 'row', gap: 14 },
   button: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
   acceptButton: { backgroundColor: '#10B981' },
   rejectButton: { backgroundColor: '#EF4444' },
   avaliarButton: { backgroundColor: '#3B82F6' },
-  buttonDisabled: { opacity: 0.6, backgroundColor: '#9CA3AF' },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  avaliacaoSection: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB', gap: 10 },
   avaliacaoInfo: { marginTop: 6 },
   avaliacaoText: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
-  pendingReviewText: { fontSize: 13, color: '#F59E0B', marginTop: 4 },
-  historicoToggle: { paddingHorizontal: 20, paddingVertical: 12 },
+  historicoToggle: { paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' },
   historicoToggleText: { color: '#3B82F6', fontSize: 15, fontWeight: '600' },
-  emptyState: { padding: 20, alignItems: 'center', justifyContent: 'center' },
+  emptyState: { padding: 20, alignItems: 'center', justifyContent: 'center', marginTop: 40 },
   emptyText: { fontSize: 15, color: '#6B7280' }
 });

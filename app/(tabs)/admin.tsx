@@ -40,10 +40,18 @@ export default function AdminTab() {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Estados da Aba de Taxas
-  const [taxas, setTaxas] = useState({ app: 0, dia: 0, hora: 0 });
+  const [taxas, setTaxas] = useState({
+    app: 0,
+    dia: 0,
+    hora: 0,
+    goleiro: 0,
+    avancado: 0,
+    meio: 0,
+    intermediario: 0
+  });
   const [loadingTaxas, setLoadingTaxas] = useState(true);
   const [savingTaxas, setSavingTaxas] = useState(false);
-  
+
   // Estados da Aba de Notificações
   const [notification, setNotification] = useState({ title: '', message: '' });
 
@@ -57,13 +65,21 @@ export default function AdminTab() {
       try {
         const { data, error } = await supabase
           .from('configuracoes_taxas')
-          .select('taxa_app, taxa_dia, taxa_hora')
+          .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro, taxa_avancado, taxa_meio, taxa_intermediario')
           .eq('id', 1)
           .single();
 
         if (error) throw error;
         if (data) {
-          setTaxas({ app: data.taxa_app, dia: data.taxa_dia, hora: data.taxa_hora });
+          setTaxas({
+            app: data.taxa_app,
+            dia: data.taxa_dia,
+            hora: data.taxa_hora,
+            goleiro: data.taxa_goleiro,
+            avancado: data.taxa_avancado,
+            meio: data.taxa_meio,
+            intermediario: data.taxa_intermediario
+          });
         }
       } catch (error) {
         console.error("Erro ao buscar taxas:", error);
@@ -169,7 +185,6 @@ export default function AdminTab() {
   };
 
   // --- Funções de Renderização das Abas ---
-
   const renderOverview = () => (
     <View style={styles.tabContent}>
       <View style={styles.statsGrid}>
@@ -180,42 +195,112 @@ export default function AdminTab() {
         <View style={styles.statCard}><View style={styles.statCardInner}><Text style={styles.statNumber}>R$ {stats.totalRecargas.toFixed(2)}</Text><Text style={styles.statLabel}>Total Recargas</Text></View></View>
         <View style={styles.statCard}><View style={styles.statCardInner}><Text style={styles.statNumber}>{stats.saquesPendentes}</Text><Text style={styles.statLabel}>Saques Pendentes</Text></View></View>
       </View>
+
+      <View style={styles.ratesSection}>
+        <Text style={styles.sectionTitle}>💰 Taxas do Aplicativo</Text>
+        {loadingTaxas ? (
+          <ActivityIndicator size="small" color="#7c3aed" style={{ marginVertical: 20 }} />
+        ) : (
+          <View style={styles.ratesGrid}>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>App</Text>
+              <Text style={styles.rateValue}>{taxas.app.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Fim de Semana</Text>
+              <Text style={styles.rateValue}>{taxas.dia.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Horário de Pico</Text>
+              <Text style={styles.rateValue}>{taxas.hora.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Goleiro</Text>
+              <Text style={styles.rateValue}>{taxas.goleiro.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Avançado</Text>
+              <Text style={styles.rateValue}>{taxas.avancado.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Meio</Text>
+              <Text style={styles.rateValue}>{taxas.meio.toFixed(1)}%</Text>
+            </View>
+            <View style={styles.rateCard}>
+              <Text style={styles.rateLabel}>Intermediário</Text>
+              <Text style={styles.rateValue}>{taxas.intermediario.toFixed(1)}%</Text>
+            </View>
+          </View>
+        )}
+      </View>
     </View>
   );
 
   const renderMonitoramento = () => {
-    const convocacoesAtivas = convocacoes.filter(c => c.status === 'pendente');
-    if (convocacoesAtivas.length === 0) {
-      return (
-        <View style={styles.tabContent}>
-          <Text style={styles.emptyText}>Nenhuma convocação ativa no momento. ✅</Text>
-        </View>
-      );
-    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const convocacoesPendente = convocacoes.filter(c => c.status === 'pendente');
+    const convocacoesAceitasHoje = convocacoes.filter(c => 
+      c.status === 'aceito' && new Date(c.data_hora_inicio).setHours(0, 0, 0, 0) === today.getTime()
+    );
+
     return (
       <ScrollView style={styles.tabContent}>
-        {convocacoesAtivas.map(conv => {
-          const statusInfo = getStatusInfo(conv.status);
-          const dataInicio = new Date(conv.data_hora_inicio);
-          return (
-            <View key={conv.id} style={styles.monitorCard}>
-              <View style={styles.monitorCardHeader}>
-                <Text style={styles.monitorLocal}>{conv.local || 'Local não definido'}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
-                  <Text style={styles.statusText}>{statusInfo.text}</Text>
+        <Text style={styles.subSectionTitle}>Convocação Pendente</Text>
+        {convocacoesPendente.length === 0 ? (
+          <Text style={styles.emptyText}>Nenhuma convocação pendente no momento. ✅</Text>
+        ) : (
+          convocacoesPendente.map(conv => {
+            const statusInfo = getStatusInfo(conv.status);
+            const dataInicio = new Date(conv.data_hora_inicio);
+            return (
+              <View key={conv.id} style={styles.monitorCard}>
+                <View style={styles.monitorCardHeader}>
+                  <Text style={styles.monitorLocal}>{conv.local || 'Local não definido'}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
+                    <Text style={styles.statusText}>{statusInfo.text}</Text>
+                  </View>
+                </View>
+                <View style={styles.monitorCardBody}>
+                  <View style={styles.monitorInfoRow}><Calendar size={16} color="#64748b" /><Text style={styles.monitorInfoText}>{dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text></View>
+                  <View style={styles.monitorInfoRow}><Clock size={16} color="#64748b" /><Text style={styles.monitorInfoText}>Duração: {calcularDuracao(conv.data_hora_inicio, conv.data_hora_fim)}</Text></View>
+                  <View style={styles.monitorInfoRow}><Text style={styles.monitorCoinEmoji}>💰</Text><Text style={styles.monitorInfoText}>Valor: {conv.valor_retido} coins</Text></View>
+                </View>
+                {conv.status === 'pendente' && (
+                  <View style={styles.countdownContainer}><Clock size={16} color="#b91c1c" /><Text style={styles.countdownText}>Expira em: {temposRestantes[conv.id] || '...'}</Text></View>
+                )}
+              </View>
+            );
+          })
+        )}
+        
+        <View style={styles.separator} />
+
+        <Text style={styles.subSectionTitle}>Convocação Aceita (Hoje)</Text>
+        {convocacoesAceitasHoje.length === 0 ? (
+          <Text style={styles.emptyText}>Nenhuma convocação aceita para hoje. 📅</Text>
+        ) : (
+          convocacoesAceitasHoje.map(conv => {
+            const statusInfo = getStatusInfo(conv.status);
+            const dataInicio = new Date(conv.data_hora_inicio);
+            return (
+              <View key={conv.id} style={styles.monitorCard}>
+                <View style={styles.monitorCardHeader}>
+                  <Text style={styles.monitorLocal}>{conv.local || 'Local não definido'}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
+                    <Text style={styles.statusText}>{statusInfo.text}</Text>
+                  </View>
+                </View>
+                <View style={styles.monitorCardBody}>
+                  <View style={styles.monitorInfoRow}><Calendar size={16} color="#64748b" /><Text style={styles.monitorInfoText}>{dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text></View>
+                  <View style={styles.monitorInfoRow}><Clock size={16} color="#64748b" /><Text style={styles.monitorInfoText}>Duração: {calcularDuracao(conv.data_hora_inicio, conv.data_hora_fim)}</Text></View>
+                  <View style={styles.monitorInfoRow}><Text style={styles.monitorCoinEmoji}>💰</Text><Text style={styles.monitorInfoText}>Valor: {conv.valor_retido} coins</Text></View>
                 </View>
               </View>
-              <View style={styles.monitorCardBody}>
-                <View style={styles.monitorInfoRow}><Calendar size={16} color="#64748b" /><Text style={styles.monitorInfoText}>{dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text></View>
-                <View style={styles.monitorInfoRow}><Clock size={16} color="#64748b" /><Text style={styles.monitorInfoText}>Duração: {calcularDuracao(conv.data_hora_inicio, conv.data_hora_fim)}</Text></View>
-                <View style={styles.monitorInfoRow}><Text style={styles.monitorCoinEmoji}>💰</Text><Text style={styles.monitorInfoText}>Valor: {conv.valor_retido} coins</Text></View>
-              </View>
-              {conv.status === 'pendente' && (
-                <View style={styles.countdownContainer}><Clock size={16} color="#b91c1c" /><Text style={styles.countdownText}>Expira em: {temposRestantes[conv.id] || '...'}</Text></View>
-              )}
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </ScrollView>
     );
   };
@@ -230,6 +315,10 @@ export default function AdminTab() {
             taxa_app: taxas.app,
             taxa_dia: taxas.dia,
             taxa_hora: taxas.hora,
+            taxa_goleiro: taxas.goleiro,
+            taxa_avancado: taxas.avancado,
+            taxa_meio: taxas.meio,
+            taxa_intermediario: taxas.intermediario,
             updated_at: new Date().toISOString(),
           })
           .eq('id', 1);
@@ -251,6 +340,10 @@ export default function AdminTab() {
         <View style={styles.inputGroup}><Text style={styles.label}>Taxa do App (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 10.5" value={String(taxas.app)} onChangeText={(text) => setTaxas(prev => ({ ...prev, app: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
         <View style={styles.inputGroup}><Text style={styles.label}>Taxa Adicional do Dia (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 5" value={String(taxas.dia)} onChangeText={(text) => setTaxas(prev => ({ ...prev, dia: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
         <View style={styles.inputGroup}><Text style={styles.label}>Taxa Adicional da Hora (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 2.5" value={String(taxas.hora)} onChangeText={(text) => setTaxas(prev => ({ ...prev, hora: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
+        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Goleiro (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 12.0" value={String(taxas.goleiro)} onChangeText={(text) => setTaxas(prev => ({ ...prev, goleiro: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
+        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Avançado (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 8.0" value={String(taxas.avancado)} onChangeText={(text) => setTaxas(prev => ({ ...prev, avancado: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
+        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Meio (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 15.0" value={String(taxas.meio)} onChangeText={(text) => setTaxas(prev => ({ ...prev, meio: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
+        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Intermediário (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 9.0" value={String(taxas.intermediario)} onChangeText={(text) => setTaxas(prev => ({ ...prev, intermediario: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
         <TouchableOpacity style={[styles.confirmButton, { marginTop: 20 }, savingTaxas && { backgroundColor: '#a5b4fc' }]} onPress={handleSaveChanges} disabled={savingTaxas}>
           {savingTaxas ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Salvar Alterações</Text>}
         </TouchableOpacity>
@@ -266,7 +359,7 @@ export default function AdminTab() {
       <TouchableOpacity style={styles.confirmButton} onPress={handleSendNotification}><Text style={styles.confirmButtonText}>Enviar</Text></TouchableOpacity>
     </View>
   );
-  
+
   const tabs = [
     { id: 'overview', label: 'Visão Geral', icon: BarChart3 },
     { id: 'monitoramento', label: 'Ao Vivo', icon: Eye },
@@ -313,12 +406,13 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 24, fontWeight: 'bold', color: '#1e293b' },
   statLabel: { fontSize: 14, color: '#64748b', marginTop: 4 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1e293b', marginBottom: 16 },
+  subSectionTitle: { fontSize: 16, fontWeight: '600', color: '#1e293b', marginBottom: 8, marginTop: 16 },
   inputGroup: { marginBottom: 12 },
   label: { fontSize: 14, fontWeight: '500', color: '#334155', marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', fontSize: 16 },
   confirmButton: { padding: 12, backgroundColor: '#7c3aed', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   confirmButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  emptyText: { textAlign: 'center', marginTop: 40, fontSize: 16, color: '#64748b' },
+  emptyText: { textAlign: 'center', marginTop: 10, fontSize: 16, color: '#64748b' },
   monitorCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   monitorCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   monitorLocal: { fontSize: 16, fontWeight: '600', color: '#1e293b', flex: 1 },
@@ -330,4 +424,38 @@ const styles = StyleSheet.create({
   monitorCoinEmoji: { fontSize: 14 },
   countdownContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#fee2e2', borderRadius: 8, alignSelf: 'flex-start' },
   countdownText: { marginLeft: 6, color: '#b91c1c', fontSize: 14, fontWeight: '600' },
+  ratesSection: {
+    marginTop: 20,
+  },
+  ratesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    margin: -6,
+    justifyContent: 'flex-start',
+  },
+  rateCard: {
+    width: '46%',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 12,
+    marginHorizontal: '2%',
+  },
+  rateLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  rateValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 20,
+  }
 });

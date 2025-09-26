@@ -198,6 +198,12 @@ export default function CarteiraTab() {
             Alert.alert('⚠️ Chave PIX obrigatória', 'Informe sua chave PIX para receber o saque.');
             return;
         }
+        // ✅ Adiciona verificação para garantir que 'users' não seja undefined
+        if (!users) {
+          console.error('[CARTEIRA] Erro: Lista de usuários não carregada.');
+          Alert.alert('Erro', 'Não foi possível solicitar o saque. Tente novamente em alguns segundos.');
+          return;
+        }
         try {
             setLoadingActions(true);
             await saquePixService.solicitarSaque({

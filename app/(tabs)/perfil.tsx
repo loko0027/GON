@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, Button, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, Button, Image, ActivityIndicator, Platform } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, Star, Target, Calendar, LogOut, Camera } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker'; // Importa a biblioteca de imagens
-import { supabase } from '@/lib/supabase'; // Importa o supabase para o upload
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { supabase } from '@/lib/supabase';
+import { decode } from 'base64-arraybuffer';
 
 export default function PerfilTab() {
   const { user, logout, updateUser } = useAuth();
@@ -12,7 +14,10 @@ export default function PerfilTab() {
   const [modalExcluirVisible, setModalExcluirVisible] = useState(false);
   const [nome, setNome] = useState(user?.nome || '');
   const [telefone, setTelefone] = useState(user?.telefone || '');
-  const [uploading, setUploading] = useState(false); // Estado para controlar o loading do upload
+  // ✅ Novos estados para cidade e estado
+  const [cidade, setCidade] = useState(user?.cidade || 'Santa Rita do Sapucaí');
+  const [estado, setEstado] = useState(user?.estado || 'MG');
+  const [uploading, setUploading] = useState(false);
 
   if (!user) return null;
 
@@ -22,8 +27,11 @@ export default function PerfilTab() {
       return;
     }
     try {
-      if (!updateUser) throw new Error('updateUser não definido');
-      await updateUser({ nome, telefone });
+      if (!updateUser) {
+        throw new Error('updateUser não definido');
+      }
+      // ✅ Atualiza o usuário com os novos campos
+      await updateUser({ nome, telefone, cidade, estado });
       Alert.alert('Sucesso', 'Perfil atualizado!');
       setModalVisible(false);
     } catch (error) {
@@ -32,58 +40,69 @@ export default function PerfilTab() {
     }
   }
 
-  // Função completa para selecionar, validar e fazer upload da foto
+  // ✅ Função para selecionar e fazer upload da foto (com suporte a web e nativo)
   async function handleSelecionarFoto() {
-    // ✅ PASSO IMPORTANTE: PEDIR PERMISSÃO PARA ACESSAR A GALERIA
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permissão necessária', 'Precisamos da sua permissão para acessar a galeria de fotos.');
       return;
     }
 
-    // Abrir a galeria de imagens
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, // Permite que o usuário recorte a imagem
-      aspect: [1, 1],      // Força um recorte quadrado
-      quality: 0.7,        // Comprime a imagem para um upload mais rápido
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
     });
 
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      return; // Usuário cancelou a seleção
+    if (result.canceled || !result.assets || result.assets.length === 0 || !result.assets[0].uri) {
+      return;
     }
 
     const image = result.assets[0];
-    const fileExt = image.uri.split('.').pop();
-    const fileName = `${user.id}.${fileExt}`; // Nomeia o arquivo com o ID do usuário para fácil associação
+    const fileExt = image.uri.split('.').pop()?.toLowerCase();
+    if (!fileExt) {
+      Alert.alert('Erro', 'Formato de arquivo inválido.');
+      return;
+    }
+
+    const fileName = `${user.id}.${fileExt}`;
     const filePath = `${fileName}`;
 
     setUploading(true);
 
     try {
-      // Converte a imagem para um formato que o Supabase entende (Blob)
-      const response = await fetch(image.uri);
-      const blob = await response.blob();
-      
+      let fileBody;
+      let contentType = image.mimeType || `image/${fileExt}`;
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(image.uri);
+        fileBody = await response.blob();
+      } else {
+        const fileData = await FileSystem.readAsStringAsync(image.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        fileBody = decode(fileData);
+      }
+
       const { error: uploadError } = await supabase.storage
-        .from('avatars') // Nome do bucket que você criou no Supabase
-        .upload(filePath, blob, {
-          upsert: true, // Sobrescreve a imagem se já existir uma com o mesmo nome
+        .from('avatars')
+        .upload(filePath, fileBody, {
+          contentType,
+          upsert: true,
         });
 
       if (uploadError) {
         throw uploadError;
       }
       
-      // Pega a URL pública da imagem que acabamos de enviar
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const publicUrl = data.publicUrl;
 
       if (!publicUrl) {
-          throw new Error("Não foi possível obter a URL pública da imagem.");
+        throw new Error("Não foi possível obter a URL pública da imagem.");
       }
       
-      // Atualiza a coluna 'foto_url' na tabela 'usuarios'
       if (updateUser) {
         await updateUser({ foto_url: publicUrl });
         Alert.alert('Sucesso!', 'Sua foto de perfil foi atualizada.');
@@ -91,11 +110,20 @@ export default function PerfilTab() {
 
     } catch (error: any) {
       console.error('Erro no upload da imagem:', error);
-      Alert.alert('Erro', error.message || 'Não foi possível enviar sua foto.');
+      Alert.alert('Erro', error.message || 'Não foi possível enviar sua foto. Por favor, tente novamente.');
     } finally {
       setUploading(false);
     }
   }
+
+  // ✅ Efeito para preencher o estado automaticamente
+  useEffect(() => {
+    if (cidade.toLowerCase() === 'santa rita do sapucaí') {
+      setEstado('MG');
+    } else {
+      setEstado('');
+    }
+  }, [cidade]);
 
   return (
     <>
@@ -165,7 +193,7 @@ export default function PerfilTab() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>GoleiroON v.2.09.06 - Conectando o futebol amador</Text>
+          <Text style={styles.footerText}>GoleiroON v.2.09.07- Conectando o futebol amador</Text>
         </View>
       </ScrollView>
 
@@ -176,6 +204,23 @@ export default function PerfilTab() {
           <TextInput value={nome} onChangeText={setNome} style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 16 }} placeholder="Digite seu nome" />
           <Text style={{ marginBottom: 6 }}>Telefone</Text>
           <TextInput value={telefone} onChangeText={setTelefone} style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 16 }} placeholder="Digite seu telefone" keyboardType="phone-pad" />
+          {/* ✅ Campos de estado e cidade na ordem correta */}
+          <Text style={{ marginBottom: 6 }}>Estado</Text>
+          <TextInput
+            value={estado}
+            onChangeText={setEstado}
+            style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 16 }}
+            editable={false} // Campo de estado desabilitado
+          />
+          <Text style={{ marginBottom: 6 }}>Cidade</Text>
+          <TextInput
+            value={cidade}
+            onChangeText={setCidade}
+            style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 16 }}
+            placeholder="Digite sua cidade"
+            autoCapitalize="words"
+            editable={false}
+          />
           <Button title="Salvar" onPress={salvarPerfil} />
           <View style={{ marginTop: 10 }}><Button title="Cancelar" onPress={() => setModalVisible(false)} color="#ef4444" /></View>
           <View style={{ marginTop: 20 }}><Button title="Deletar Conta" color="#ef4444" onPress={() => setModalExcluirVisible(true)} /></View>

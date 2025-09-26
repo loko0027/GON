@@ -2,10 +2,18 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "2.09.06",
+  version: "2.09.07",
   orientation: "portrait",
-  icon: "./assets/images/newicone.png", // ✅ Novo ícone principal
-  scheme: "goleiroon", // melhor que "myapp" para deep linking
+  icon: "./assets/images/newicone.png",
+
+  // ✅ CONFIGURAÇÃO DA TELA DE SPLASH ADICIONADA
+  splash: {
+    image: "./assets/images/Splashinew.png", // Apontando para a sua imagem
+    resizeMode: "contain",                  // Garante que a imagem não seja cortada
+    backgroundColor: "#FFFFFF",             // Cor de fundo (pode alterar se quiser)
+  },
+
+  scheme: "goleiroon",
   userInterfaceStyle: "automatic",
 
   notification: {
@@ -32,7 +40,7 @@ export default ({ config }) => ({
       "ACCESS_COARSE_LOCATION",
     ],
     adaptiveIcon: {
-      foregroundImage: "./assets/images/newicone.png", // ✅ Novo ícone adaptativo
+      foregroundImage: "./assets/images/newicone.png",
       backgroundColor: "#FFFFFF",
     },
     notification: {
@@ -44,7 +52,7 @@ export default ({ config }) => ({
   web: {
     bundler: "metro",
     output: "single",
-    favicon: "./assets/images/newicone.png", // ✅ Novo favicon web
+    favicon: "./assets/images/newicone.png",
   },
 
   plugins: [

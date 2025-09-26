@@ -8,7 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function GoleirosTab() {
   const { user } = useAuth();
-  const { criarConvocacao, getSaldo, calcularTaxaConvocacao, calcularValorGoleiro, calcularTaxaApp } = useApp();
+  const { criarConvocacao, getSaldo } = useApp();
 
   const [goleiros, setGoleiros] = useState<any[]>([]);
   const [locais, setLocais] = useState<any[]>([]);
@@ -29,6 +29,17 @@ export default function GoleirosTab() {
     local_id: null,
     latitude: null,
     longitude: null
+  });
+
+  // ✅ NOVO ESTADO PARA ARMAZENAR AS TAXAS DO BANCO DE DADOS
+  const [dbTaxas, setDbTaxas] = useState({
+    app: 0,
+    dia: 0,
+    hora: 0,
+    goleiro: 0,
+    avancado: 0,
+    meio: 0,
+    intermediario: 0,
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -89,6 +100,30 @@ export default function GoleirosTab() {
     setLoading(false);
   };
 
+  // ✅ NOVO useEffect PARA BUSCAR AS TAXAS DO BANCO DE DADOS
+  useEffect(() => {
+    const fetchDbTaxas = async () => {
+      const { data, error } = await supabase
+        .from('configuracoes_taxas')
+        .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro, taxa_avancado, taxa_meio, taxa_intermediario')
+        .eq('id', 1)
+        .single();
+      if (error) console.error('Erro ao buscar taxas do BD:', error);
+      if (data) {
+        setDbTaxas({
+          app: data.taxa_app,
+          dia: data.taxa_dia,
+          hora: data.taxa_hora,
+          goleiro: data.taxa_goleiro,
+          avancado: data.taxa_avancado,
+          meio: data.taxa_meio,
+          intermediario: data.taxa_intermediario,
+        });
+      }
+    };
+    fetchDbTaxas();
+  }, []);
+
   const refreshGoleiros = async () => {
     setRefreshing(true);
     await fetchGoleiros();
@@ -102,7 +137,6 @@ export default function GoleirosTab() {
 
   useEffect(() => {
     if (selectedDate) {
-      // ✅ 1. USANDO A FUNÇÃO SEGURA PARA EVITAR O BUG
       const dataStr = formatarDataSemFuso(selectedDate);
       setConvocacaoData(prev => ({ ...prev, data: dataStr }));
     }
@@ -125,42 +159,74 @@ export default function GoleirosTab() {
   }, [selectedHoraFim]);
 
   useEffect(() => {
-    if (selectedGoleiro && selectedDate && selectedHoraInicio) {
+    if (selectedGoleiro && selectedDate && selectedHoraInicio && selectedHoraFim && dbTaxas) {
       calcularValorEmTempoReal();
     } else {
       setValorCalculado(null);
     }
-  }, [selectedGoleiro, selectedDate, selectedHoraInicio]);
+  }, [selectedGoleiro, selectedDate, selectedHoraInicio, selectedHoraFim, dbTaxas]);
 
+  // ✅ FUNÇÃO DE CÁLCULO ATUALIZADA PARA USAR AS TAXAS DO BANCO DE DADOS
   const calcularValorEmTempoReal = () => {
-    if (!selectedGoleiro || !selectedDate || !selectedHoraInicio) return;
-    const dataHora = new Date(selectedDate);
-    dataHora.setHours(selectedHoraInicio.getHours(), selectedHoraInicio.getMinutes());
-    let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
-    if (selectedGoleiro.nota_media < 3) nivel = 'iniciante';
-    else if (selectedGoleiro.nota_media < 4) nivel = 'intermediario';
-    else nivel = 'veterano';
-    const valorGoleiro = calcularValorGoleiro(nivel, dataHora);
-    const taxaApp = calcularTaxaApp(0);
-    const total = valorGoleiro + taxaApp;
-    const diaSemana = dataHora.getDay();
-    const diasValorizados = [0, 1, 5, 6];
-    const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
-    const hora = dataHora.getHours();
+    if (!selectedGoleiro || !selectedDate || !selectedHoraInicio || !selectedHoraFim) return;
+
+    const dataHoraInicio = new Date(selectedDate);
+    dataHoraInicio.setHours(selectedHoraInicio.getHours(), selectedHoraInicio.getMinutes());
+
+    const dataHoraFim = new Date(selectedDate);
+    dataHoraFim.setHours(selectedHoraFim.getHours(), selectedHoraFim.getMinutes());
+
+    const duracaoHoras = Math.abs(dataHoraFim.getTime() - dataHoraInicio.getTime()) / 36e5;
+    if (duracaoHoras === 0) return;
+
+    let taxaPosicao = 0;
+    const nota = selectedGoleiro.nota_media;
+    if (nota >= 4.5) { // Nível Elite
+      taxaPosicao = dbTaxas.goleiro;
+    } else if (nota >= 4.0) { // Nível Veterano
+      taxaPosicao = dbTaxas.meio;
+    } else if (nota >= 3.5) { // Nível Intermediário
+      taxaPosicao = dbTaxas.intermediario;
+    } else { // Níveis Promissor e Iniciante
+      taxaPosicao = dbTaxas.avancado;
+    }
+
+    const taxaApp = dbTaxas.app;
+    const taxaDia = [0, 6].includes(dataHoraInicio.getDay()) ? dbTaxas.dia : 0; // 0 = Domingo, 6 = Sábado
+    const hora = dataHoraInicio.getHours();
     let taxaHorario = 0;
-    if (hora >= 9 && hora < 14) taxaHorario = 6;
-    setValorCalculado({ total, valorGoleiro, taxaApp, taxaDia, taxaHorario });
+    if (hora >= 9 && hora < 14) {
+      taxaHorario = dbTaxas.hora;
+    }
+    
+    // Calcula o valor total por hora e depois pelo número de horas
+    const valorGoleiroPorHora = taxaPosicao + taxaDia + taxaHorario;
+    const valorGoleiroTotal = valorGoleiroPorHora * duracaoHoras;
+    const total = valorGoleiroTotal + taxaApp;
+
+    setValorCalculado({
+      total,
+      valorGoleiro: valorGoleiroTotal,
+      taxaApp,
+      taxaDia,
+      taxaHorario,
+    });
   };
 
+  // ✅ FUNÇÃO ATUALIZADA PARA USAR AS NOVAS TAXAS
   const custoPorGoleiro = (nota?: number) => {
-    const dataHora = new Date();
-    let nivel: 'iniciante' | 'intermediario' | 'veterano' = 'iniciante';
-    if (nota) {
-      if (nota < 3) nivel = 'iniciante';
-      else if (nota < 4) nivel = 'intermediario';
-      else nivel = 'veterano';
+    if (!nota || !dbTaxas) return 0;
+    let taxaPosicao = 0;
+    if (nota >= 4.5) {
+      taxaPosicao = dbTaxas.goleiro;
+    } else if (nota >= 4.0) {
+      taxaPosicao = dbTaxas.meio;
+    } else if (nota >= 3.5) {
+      taxaPosicao = dbTaxas.intermediario;
+    } else {
+      taxaPosicao = dbTaxas.avancado;
     }
-    return calcularTaxaConvocacao(nivel, dataHora);
+    return taxaPosicao + dbTaxas.dia + dbTaxas.hora + dbTaxas.app;
   };
 
   const saldo = getSaldo(user?.id || '');
@@ -192,9 +258,9 @@ export default function GoleirosTab() {
   const onChangeHoraInicio = (event: any, date?: Date) => {
     setShowHoraInicioPicker(false);
     if (date) {
-        setSelectedHoraInicio(date);
-        const horaFimSugerida = new Date(date.getTime() + 60 * 60 * 1000);
-        setSelectedHoraFim(horaFimSugerida);
+      setSelectedHoraInicio(date);
+      const horaFimSugerida = new Date(date.getTime() + 60 * 60 * 1000);
+      setSelectedHoraFim(horaFimSugerida);
     }
   };
 
@@ -293,9 +359,31 @@ export default function GoleirosTab() {
           {renderInfoIntervalo()}
 
           {renderLocalInput()}
-          {valorCalculado && (<View style={styles.valorDetalhado}><Text style={styles.valorTitulo}>💵 Detalhamento do Valor</Text><View style={styles.valorItem}><Text style={styles.valorLabel}>Valor Base do Goleiro:</Text><Text style={styles.valorNumero}>{valorCalculado.valorGoleiro - valorCalculado.taxaDia - valorCalculado.taxaHorario} coins</Text></View>{valorCalculado.taxaDia > 0 && (<View style={styles.valorItem}><Text style={styles.valorLabel}>➕ Taxa de Dia (Fim de Semana):</Text><Text style={styles.valorNumero}>+{valorCalculado.taxaDia} coins</Text></View>)}{valorCalculado.taxaHorario > 0 && (<View style={styles.valorItem}><Text style={styles.valorLabel}>➕ Taxa de Horário (09h-14h):</Text><Text style={styles.valorNumero}>+{valorCalculado.taxaHorario} coins</Text></View>)}<View style={styles.valorItem}><Text style={styles.valorLabel}>💎 Valor Total para o Goleiro:</Text><Text style={[styles.valorNumero, styles.valorGoleiro]}>{valorCalculado.valorGoleiro} coins</Text></View><View style={styles.valorItem}><Text style={styles.valorLabel}>📱 Taxa Fixa do App:</Text><Text style={[styles.valorNumero, styles.taxaApp]}>+{valorCalculado.taxaApp} coins</Text></View><View style={[styles.valorItem, styles.valorTotal]}><Text style={styles.valorLabel}>💰 VALOR TOTAL:</Text><Text style={[styles.valorNumero, styles.valorTotalNumero]}>{valorCalculado.total} coins</Text></View></View>)}
+          {valorCalculado && (<View style={styles.valorDetalhado}>
+              <Text style={styles.valorTitulo}>💵 Detalhamento do Valor</Text>
+              <View style={styles.valorItem}>
+                <Text style={styles.valorLabel}>Valor Base do Goleiro:</Text>
+                <Text style={styles.valorNumero}>{valorCalculado.valorGoleiro.toFixed(2)} coins</Text>
+              </View>
+              {valorCalculado.taxaDia > 0 && (<View style={styles.valorItem}>
+                  <Text style={styles.valorLabel}>➕ Taxa de Dia (Fim de Semana):</Text>
+                  <Text style={styles.valorNumero}>+{valorCalculado.taxaDia.toFixed(2)} coins</Text>
+                </View>)}
+              {valorCalculado.taxaHorario > 0 && (<View style={styles.valorItem}>
+                  <Text style={styles.valorLabel}>➕ Taxa de Horário (09h-14h):</Text>
+                  <Text style={styles.valorNumero}>+{valorCalculado.taxaHorario.toFixed(2)} coins</Text>
+                </View>)}
+              <View style={styles.valorItem}>
+                <Text style={styles.valorLabel}>📱 Taxa Fixa do App:</Text>
+                <Text style={[styles.valorNumero, styles.taxaApp]}>+{valorCalculado.taxaApp.toFixed(2)} coins</Text>
+              </View>
+              <View style={[styles.valorItem, styles.valorTotal]}>
+                <Text style={styles.valorLabel}>💰 VALOR TOTAL:</Text>
+                <Text style={[styles.valorNumero, styles.valorTotalNumero]}>{valorCalculado.total.toFixed(2)} coins</Text>
+              </View>
+            </View>)}
           <View style={styles.valorInfo}><Text style={styles.valorText}>💳 Seu saldo disponível: {saldo.saldo_coins} coins</Text>{saldo.saldo_retido > 0 && <Text style={styles.saldoRetido}>Saldo retido: {saldo.saldo_retido} coins</Text>}</View>
-          <TouchableOpacity style={[styles.submitButton, saldo.saldo_coins < custoReal && styles.disabledButton]} onPress={handleSubmitConvocacao} disabled={saldo.saldo_coins < custoReal || !valorCalculado}><Text style={styles.submitButtonText}>{!valorCalculado ? 'Preencha os campos' : saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : `Confirmar Convocação - ${custoReal} coins`}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.submitButton, saldo.saldo_coins < custoReal && styles.disabledButton]} onPress={handleSubmitConvocacao} disabled={saldo.saldo_coins < custoReal || !valorCalculado}><Text style={styles.submitButtonText}>{!valorCalculado ? 'Preencha os campos' : saldo.saldo_coins < custoReal ? 'Saldo Insuficiente' : `Confirmar Convocação - ${custoReal.toFixed(2)} coins`}</Text></TouchableOpacity>
         </ScrollView>
         {renderLocaisModal()}
       </View>

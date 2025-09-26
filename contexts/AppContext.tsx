@@ -109,9 +109,16 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   const { user, loading: authLoading } = useAuth();
-
-  // ✅ 1. TAXA DO APP CENTRALIZADA PARA FÁCIL MANUTENÇÃO
-  const TAXA_APP_FIXA = 5;
+  
+  const [dbTaxas, setDbTaxas] = useState({
+    app: 0,
+    dia: 0,
+    hora: 0,
+    goleiro: 0,
+    avancado: 0,
+    meio: 0,
+    intermediario: 0,
+  });
 
   const [convocacoes, setConvocacoes] = useState<Convocacao[]>([]);
   const [saldos, setSaldos] = useState<Saldo[]>([]);
@@ -125,10 +132,10 @@ export function AppProvider({ children }: AppProviderProps) {
   const [loading, setLoading] = useState(true);
 
   const getSaldo = useCallback((userId: string): Saldo => {
-    return saldos.find(s => s.usuario_id === userId) || { 
-      usuario_id: userId, 
-      saldo_coins: 0, 
-      saldo_retido: 0 
+    return saldos.find(s => s.usuario_id === userId) || {
+      usuario_id: userId,
+      saldo_coins: 0,
+      saldo_retido: 0
     };
   }, [saldos]);
 
@@ -137,41 +144,40 @@ export function AppProvider({ children }: AppProviderProps) {
     return getSaldo(user.id);
   }, [user, getSaldo]);
 
-  
   const dataLoadedForUserRef = useRef<string | null>(null);
   const dataClearedForNullUserRef = useRef(false);
 
-  const calcularTaxaApp = useCallback((valor: number): number => {
-    return TAXA_APP_FIXA;
-  }, [TAXA_APP_FIXA]);
+  const calcularTaxaApp = useCallback((): number => {
+    return dbTaxas.app;
+  }, [dbTaxas]);
 
   const calcularValorGoleiro = useCallback((
-    nivelJogador: 'iniciante' | 'intermediario' | 'veterano', 
+    nivelJogador: 'iniciante' | 'intermediario' | 'veterano',
     dataHora: Date
   ): number => {
     let valorBaseGoleiro = 0;
     switch (nivelJogador) {
-      case 'iniciante': valorBaseGoleiro = 30; break;
-      case 'intermediario': valorBaseGoleiro = 50; break;
-      case 'veterano': valorBaseGoleiro = 70; break;
+      case 'iniciante': valorBaseGoleiro = dbTaxas.avancado; break;
+      case 'intermediario': valorBaseGoleiro = dbTaxas.intermediario; break;
+      case 'veterano': valorBaseGoleiro = dbTaxas.goleiro; break;
     }
     const diaSemana = dataHora.getDay();
     const diasValorizados = [0, 1, 5, 6];
-    const taxaDia = diasValorizados.includes(diaSemana) ? 5 : 0;
+    const taxaDia = diasValorizados.includes(diaSemana) ? dbTaxas.dia : 0;
     const hora = dataHora.getHours();
     let taxaHorario = 0;
     if (hora >= 9 && hora < 14) {
-      taxaHorario = 6;
+      taxaHorario = dbTaxas.hora;
     }
     return valorBaseGoleiro + taxaDia + taxaHorario;
-  }, []);
+  }, [dbTaxas]);
 
   const calcularTaxaConvocacao = useCallback((
-    nivelJogador: 'iniciante' | 'intermediario' | 'veterano', 
+    nivelJogador: 'iniciante' | 'intermediario' | 'veterano',
     dataHora: Date
   ): number => {
     const valorGoleiro = calcularValorGoleiro(nivelJogador, dataHora);
-    const taxaApp = calcularTaxaApp(0);
+    const taxaApp = calcularTaxaApp();
     return valorGoleiro + taxaApp;
   }, [calcularValorGoleiro, calcularTaxaApp]);
 
@@ -206,6 +212,33 @@ export function AppProvider({ children }: AppProviderProps) {
       console.error("Erro ao carregar saldos:", e);
       setSaldos([]);
     }
+  }, []);
+  
+  useEffect(() => {
+    const fetchDbTaxas = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('configuracoes_taxas')
+          .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro, taxa_avancado, taxa_meio, taxa_intermediario')
+          .eq('id', 1)
+          .single();
+        if (error) throw error;
+        if (data) {
+          setDbTaxas({
+            app: data.taxa_app,
+            dia: data.taxa_dia,
+            hora: data.taxa_hora,
+            goleiro: data.taxa_goleiro,
+            avancado: data.taxa_avancado,
+            meio: data.taxa_meio,
+            intermediario: data.taxa_intermediario,
+          });
+        }
+      } catch (e) {
+        console.error("Erro ao carregar taxas do BD:", e);
+      }
+    };
+    fetchDbTaxas();
   }, []);
 
   const loadCategorias = useCallback(async (): Promise<void> => {
@@ -473,7 +506,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [convocacoes, getSaldo, loadData]);
 
-  // ✅ 2. FUNÇÃO DE PAGAMENTO AO GOLEIRO COMPLETAMENTE CORRIGIDA
+  // ✅ LÓGICA DE AVALIAÇÃO E PAGAMENTO CORRIGIDA
   const avaliarGoleiro = useCallback(async (convocacaoId: string, nota: number): Promise<void> => {
     try {
       if (!user) throw new Error('Usuário não autenticado');
@@ -493,15 +526,14 @@ export function AppProvider({ children }: AppProviderProps) {
       const { error: updateError } = await supabase.from('convocacoes').update({ avaliado_goleiro: true }).eq('id', convocacaoId);
       if (updateError) throw updateError;
 
-      // Lógica de pagamento corrigida
-      const valorParaGoleiro = convocacao.valor_retido - TAXA_APP_FIXA;
-      const bonusPorAvaliacao = 20 + nota * 5;
-      const pagamentoTotalGoleiro = valorParaGoleiro + bonusPorAvaliacao;
+      // ✅ Nova lógica de pagamento: valor retido menos taxa do app
+      const taxaApp = dbTaxas.app;
+      const valorParaGoleiro = convocacao.valor_retido - taxaApp;
 
       const saldoGoleiro = getSaldo(convocacao.goleiro_id);
       await supabase.from('saldos').upsert({
         usuario_id: convocacao.goleiro_id,
-        saldo_coins: (saldoGoleiro?.saldo_coins || 0) + pagamentoTotalGoleiro,
+        saldo_coins: (saldoGoleiro?.saldo_coins || 0) + valorParaGoleiro,
       }, { onConflict: 'usuario_id' });
 
       const saldoOrganizador = getSaldo(user.id);
@@ -510,14 +542,14 @@ export function AppProvider({ children }: AppProviderProps) {
         saldo_retido: (saldoOrganizador?.saldo_retido || 0) - convocacao.valor_retido,
       }, { onConflict: 'usuario_id' });
 
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Goleiro avaliado com sucesso!');
     } catch (error: any) {
       console.error("Erro ao avaliar goleiro:", error);
       Alert.alert('Erro', error.message || 'Não foi possível avaliar o goleiro');
     }
-  }, [user, convocacoes, getSaldo, loadData, TAXA_APP_FIXA]);
+  }, [user, convocacoes, getSaldo, loadData, dbTaxas]);
+
 
   const avaliarOrganizador = useCallback(async (convocacaoId: string, categoria: string): Promise<void> => {
     try {
@@ -534,7 +566,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (avaliacaoError) throw avaliacaoError;
       const { error: updateError } = await supabase.from('convocacoes').update({ avaliado_organizador: true }).eq('id', convocacaoId);
       if (updateError) throw updateError;
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Organizador avaliado com sucesso!');
     } catch (error: any) {
@@ -551,7 +582,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (convocacao.organizador_id !== user.id) throw new Error('Apenas o organizador pode confirmar presença');
       const { error } = await supabase.from('convocacoes').update({ presenca_status: status }).eq('id', convocacaoId);
       if (error) throw error;
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', `Presença confirmada como: ${status}`);
     } catch (error: any) {
@@ -579,7 +609,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (!user) throw new Error('Usuário não autenticado');
       const { error } = await supabase.from('recargas_coins').insert({ ...recarga, organizador_id: user.id, status: 'pendente' });
       if (error) throw error;
-      // Notificação removida
       await loadRecargas();
       Alert.alert('Sucesso', 'Solicitação de recarga enviada para aprovação!');
     } catch (error: any) {
@@ -599,7 +628,6 @@ export function AppProvider({ children }: AppProviderProps) {
         usuario_id: recarga.organizador_id,
         saldo_coins: (saldoExistente?.saldo_coins || 0) + recarga.coins_recebidos,
       }, { onConflict: 'usuario_id' });
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Recarga aprovada e saldo atualizado!');
     } catch (error: any) {
@@ -612,7 +640,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('recargas_coins').update({ status: 'rejeitado' }).eq('id', recargaId);
       if (error) throw error;
-      // Notificação removida
       await loadRecargas();
       Alert.alert('Sucesso', 'Recarga rejeitada.');
     } catch (error: any) {
@@ -630,10 +657,9 @@ export function AppProvider({ children }: AppProviderProps) {
       }
       const { error } = await supabase.from('saques_pix').insert({ ...saque, goleiro_id: user.id, status: 'pendente' });
       if (error) throw error;
-      await supabase.from('saldos').update({ 
-        saldo_coins: saldoUsuario.saldo_coins - saque.valor_saque 
+      await supabase.from('saldos').update({
+        saldo_coins: saldoUsuario.saldo_coins - saque.valor_saque
       }).eq('usuario_id', user.id);
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Solicitação de saque enviada para aprovação!');
     } catch (error: any) {
@@ -642,19 +668,12 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [user, getSaldoUsuario, loadData]);
 
-  // ✅ 3. BUG CRÍTICO DE PAGAMENTO DUPLICADO CORRIGIDO
   const aprovarSaque = useCallback(async (saqueId: string): Promise<void> => {
     try {
       const { data: saque, error: saqueError } = await supabase.from('saques_pix').select('goleiro_id, valor_saque').eq('id', saqueId).single();
       if (saqueError || !saque) throw new Error('Saque não encontrado');
-  
-      // O trecho que adicionava dinheiro de volta ao saldo foi REMOVIDO.
-      // A dedução do saldo já ocorreu em 'solicitarSaque'.
-  
       const { error: updateError } = await supabase.from('saques_pix').update({ status: 'aprovado' }).eq('id', saqueId);
       if (updateError) throw updateError;
-  
-      // Notificação removida
       await loadSaques();
       Alert.alert('Sucesso', 'Saque aprovado com sucesso!');
     } catch (error: any) {
@@ -675,7 +694,6 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_coins: saldoGoleiro.saldo_coins + saque.valor_saque
         }).eq('usuario_id', saque.goleiro_id);
       }
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Saque rejeitado e valor devolvido ao saldo!');
     } catch (error: any) {
@@ -692,15 +710,14 @@ export function AppProvider({ children }: AppProviderProps) {
       if (saldoRemetente.saldo_coins < valor) {
         throw new Error('Saldo insuficiente para realizar a transferência');
       }
-      await supabase.from('saldos').update({ 
-        saldo_coins: saldoRemetente.saldo_coins - valor 
+      await supabase.from('saldos').update({
+        saldo_coins: saldoRemetente.saldo_coins - valor
       }).eq('usuario_id', user.id);
       const saldoDestinatario = getSaldo(destinatarioId);
       await supabase.from('saldos').upsert({
         usuario_id: destinatarioId,
         saldo_coins: (saldoDestinatario?.saldo_coins || 0) + valor,
       }, { onConflict: 'usuario_id' });
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Transferência realizada com sucesso!');
     } catch (error: any) {
@@ -714,7 +731,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (!user) throw new Error('Usuário não autenticado');
       const { error } = await supabase.from('chamados_suporte').insert({ ...chamado, solicitante_id: user.id, status: 'pendente' });
       if (error) throw error;
-      // Notificação removida
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado criado com sucesso!');
     } catch (error: any) {
@@ -727,7 +743,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('chamados_suporte').update({ status: 'aprovado' }).eq('id', chamadoId);
       if (error) throw error;
-      // Notificação removida
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado aprovado com sucesso!');
     } catch (error: any) {
@@ -740,7 +755,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('chamados_suporte').update({ status: 'recusado' }).eq('id', chamadoId);
       if (error) throw error;
-      // Notificação removida
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado recusado com sucesso!');
     } catch (error: any) {
@@ -753,7 +767,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('chamados_suporte').update({ status: 'resolvido' }).eq('id', chamadoId);
       if (error) throw error;
-      // Notificação removida
       await loadChamadosSuporte();
       Alert.alert('Sucesso', 'Chamado marcado como resolvido!');
     } catch (error: any) {
@@ -767,7 +780,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (!user) throw new Error('Usuário não autenticado');
       const { error } = await supabase.from('mensagens_suporte').insert({ ...mensagem, autor_id: user.id });
       if (error) throw error;
-      // Notificação removida
       await loadMensagensSuporte();
     } catch (error: any) {
       console.error("Erro ao enviar mensagem:", error);

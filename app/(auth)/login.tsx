@@ -164,7 +164,7 @@ export default function AuthPage() {
       <View style={styles.headerContainer}>
         <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
           <Image
-            source={require('@/assets/images/goleiroon.png')}
+            source={require('@/assets/images/newicone.png')}
             style={{ width: 100, height: 100, resizeMode: 'contain', marginTop: 16 }} 
           />
         </View>

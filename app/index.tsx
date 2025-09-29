@@ -8,7 +8,7 @@ import {
   Animated, 
   Dimensions,
   StatusBar,
-  Image // Importe o componente Image
+  Image
 } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { Redirect, useRouter } from 'expo-router';
@@ -25,9 +25,7 @@ import {
   Zap
 } from 'lucide-react-native';
 
-// Importa a imagem local da luva de goleiro
-// Certifique-se de que o caminho 'assets/goleiroon.png' esteja correto
-const GOLIE_ICON_LOCAL = require('../assets//images/goleiroon.png'); 
+const GOLIE_ICON_LOCAL = require('../assets//images/newicone.png'); 
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,14 +35,12 @@ export default function Index() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const [currentFeature, setCurrentFeature] = useState(0);
   
-  // Animações
   const fadeInAnim = useRef(new Animated.Value(0)).current;
   const slideInAnim = useRef(new Animated.Value(50)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Animações iniciais
     Animated.parallel([
       Animated.timing(fadeInAnim, {
         toValue: 1,
@@ -58,7 +54,6 @@ export default function Index() {
       }),
     ]).start();
 
-    // Animação de pulso contínua
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -75,7 +70,6 @@ export default function Index() {
     );
     pulseLoop.start();
 
-    // Rotação contínua
     const rotateLoop = Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
@@ -85,7 +79,6 @@ export default function Index() {
     );
     rotateLoop.start();
 
-    // Carrossel de features
     const featureInterval = setInterval(() => {
       setCurrentFeature((prev) => (prev + 1) % 4);
     }, 3000);
@@ -104,9 +97,8 @@ export default function Index() {
         style={styles.loadingContainer}
       >
         <Animated.View style={[styles.loadingContent, { transform: [{ scale: pulseAnim }] }]}>
-          {/* Ícone de luva de goleiro no carregamento (usando imagem local) */}
           <Image 
-            source={GOLIE_ICON_LOCAL} // Usando a imagem local
+            source={GOLIE_ICON_LOCAL}
             style={styles.loadingGloveIcon} 
             accessibilityLabel="Ícone de luva de goleiro"
           />
@@ -195,7 +187,6 @@ export default function Index() {
             colors={['#667eea', '#764ba2']}
             style={styles.heroSection}
           >
-            {/* Elementos decorativos animados */}
             <Animated.View 
               style={[
                 styles.decorativeCircle,
@@ -220,14 +211,18 @@ export default function Index() {
                 }
               ]}
             >
-              {/* Título com o ícone de luva de goleiro (usando imagem local) */}
               <Animated.View style={[styles.heroTitleContainer, { transform: [{ scale: pulseAnim }] }]}>
                 <Image 
-                  source={GOLIE_ICON_LOCAL} // Usando a imagem local
+                  source={GOLIE_ICON_LOCAL}
                   style={styles.heroGloveIcon} 
                   accessibilityLabel="Ícone de luva de goleiro"
                 />
-                <Text style={styles.heroTitleText}> GoleiroON </Text>
+                
+                {/* ===== AQUI ESTÁ A ALTERAÇÃO ===== */}
+                <Text style={styles.heroTitleText}>
+                  Goleiro<Text style={styles.heroTitleTextOn}>ON</Text>
+                </Text>
+                
               </Animated.View>
               
               <Text style={styles.heroSubtitle}>
@@ -425,14 +420,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 1,
   },
-  // Novo estilo para o container do título e ícone
   heroTitleContainer: {
-    flexDirection: 'row', // Para alinhar o ícone e o texto lado a lado
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
-  // Estilo para o texto do título (anteriormente heroTitle)
   heroTitleText: {
     fontSize: 48,
     fontWeight: '900',
@@ -441,13 +434,16 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
-    marginLeft: 10, // Espaçamento entre o ícone e o texto
+    marginLeft: 10,
   },
-  // Estilo para o ícone da luva no título principal
+  // ===== NOVO ESTILO ADICIONADO =====
+  heroTitleTextOn: {
+    color: '#9d9b22', // Cor dourada/amarela do logo
+  },
   heroGloveIcon: {
-    width: 50, // Ajuste o tamanho conforme necessário
-    height: 50, // Ajuste o tamanho conforme necessário
-    resizeMode: 'contain', // Garante que a imagem se ajuste sem cortar
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
   },
   heroSubtitle: {
     fontSize: 22,
@@ -649,7 +645,7 @@ const styles = StyleSheet.create({
   },
   loadingContent: {
     alignItems: 'center',
-    flexDirection: 'column', // Para empilhar o ícone e o texto verticalmente
+    flexDirection: 'column',
   },
   loadingText: {
     fontSize: 24,
@@ -657,10 +653,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginTop: 16,
   },
-  // Estilo para o ícone da luva na tela de carregamento
   loadingGloveIcon: {
-    width: 80, // Ajuste o tamanho conforme necessário
-    height: 80, // Ajuste o tamanho conforme necessário
+    width: 80,
+    height: 80,
     resizeMode: 'contain',
   },
 });

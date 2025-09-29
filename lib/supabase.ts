@@ -2,8 +2,8 @@ import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native'; // 1. IMPORTAR O PLATFORM
 
-// Pega do "extra" injetado pelo EAS Build
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey;
 
@@ -13,10 +13,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    // 2. CORREÇÃO: Usar o armazenamento correto para cada plataforma
+    storage: Platform.OS === 'web' ? undefined : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: false, // Importante para mobile, evita problemas
     flowType: 'pkce',
   },
   global: {

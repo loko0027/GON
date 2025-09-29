@@ -11,6 +11,7 @@ import React, {
 import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getDay } from 'date-fns'; // <-- 1. IMPORTAÇÃO ADICIONADA
 import {
   Convocacao,
   CategoriaAvaliacao,
@@ -21,79 +22,81 @@ import {
   MensagemSuporte,
   User,
 } from '@/types';
-// A importação das notificações foi removida, conforme solicitado.
+
+// ... (o resto da interface AppContextType permanece o mesmo) ...
 
 interface AppContextType {
-  convocacoes: Convocacao[];
-  saldos: Saldo[];
-  categorias: CategoriaAvaliacao[];
-  recargas: RecargaCoins[];
-  saques: SaquePix[];
-  chamadosSuporte: ChamadoSuporte[];
-  mensagensSuporte: MensagemSuporte[];
-  allAppUsers: User[];
-  refreshing: boolean;
-  loading: boolean;
+  convocacoes: Convocacao[];
+  saldos: Saldo[];
+  categorias: CategoriaAvaliacao[];
+  recargas: RecargaCoins[];
+  saques: SaquePix[];
+  chamadosSuporte: ChamadoSuporte[];
+  mensagensSuporte: MensagemSuporte[];
+  allAppUsers: User[];
+  refreshing: boolean;
+  loading: boolean;
 
-  getAllUsers: () => User[];
-  getUsuariosPendentes: () => User[];
-  aprovarUsuario: (userId: string) => Promise<void>;
-  rejeitarUsuario: (userId: string) => Promise<void>;
-  getUsuarioById: (userId: string) => User | undefined;
-  atualizarUsuario: (userId: string, updates: Partial<User>) => Promise<void>;
+  getAllUsers: () => User[];
+  getUsuariosPendentes: () => User[];
+  aprovarUsuario: (userId: string) => Promise<void>;
+  rejeitarUsuario: (userId: string) => Promise<void>;
+  getUsuarioById: (userId: string) => User | undefined;
+  atualizarUsuario: (userId: string, updates: Partial<User>) => Promise<void>;
 
-  getSaquesPendentes: () => SaquePix[];
-  getRecargasPendentes: () => RecargaCoins[];
-  getTransacoesUsuario: () => {
-    recargas: RecargaCoins[];
-    saques: SaquePix[];
-  };
+  getSaquesPendentes: () => SaquePix[];
+  getRecargasPendentes: () => RecargaCoins[];
+  getTransacoesUsuario: () => {
+    recargas: RecargaCoins[];
+    saques: SaquePix[];
+  };
 
-  fetchConvocacoes: () => Promise<Convocacao[]>;
-  criarConvocacao: (convocacao: Omit<Convocacao, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  aceitarConvocacao: (convocacaoId: string) => Promise<void>;
-  recusarConvocacao: (convocacaoId: string) => Promise<void>;
-  avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
-  avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
-  confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
-  getConvocacoesPorUsuario: (userId: string) => Convocacao[];
-  getConvocacoesAtivas: () => Convocacao[];
-  getConvocacoesHistorico: () => Convocacao[];
+  fetchConvocacoes: () => Promise<Convocacao[]>;
+  criarConvocacao: (convocacao: Omit<Convocacao, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  aceitarConvocacao: (convocacaoId: string) => Promise<void>;
+  recusarConvocacao: (convocacaoId: string) => Promise<void>;
+  avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
+  avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
+  confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
+  getConvocacoesPorUsuario: (userId: string) => Convocacao[];
+  getConvocacoesAtivas: () => Convocacao[];
+  getConvocacoesHistorico: () => Convocacao[];
 
-  recarregarCoins: (recarga: Omit<RecargaCoins, 'id' | 'created_at'>) => Promise<void>;
-  aprovarRecarga: (recargaId: string) => Promise<void>;
-  rejeitarRecarga: (recargaId: string) => Promise<void>;
-  solicitarSaque: (saque: Omit<SaquePix, 'id' | 'created_at'>) => Promise<void>;
-  aprovarSaque: (saqueId: string) => Promise<void>;
-  rejeitarSaque: (saqueId: string) => Promise<void>;
-  getSaldo: (userId: string) => Saldo;
-  getSaldoUsuario: () => Saldo;
-  transferirCoins: (destinatarioId: string, valor: number) => Promise<void>;
+  recarregarCoins: (recarga: Omit<RecargaCoins, 'id' | 'created_at'>) => Promise<void>;
+  aprovarRecarga: (recargaId: string) => Promise<void>;
+  rejeitarRecarga: (recargaId: string) => Promise<void>;
+  solicitarSaque: (saque: Omit<SaquePix, 'id' | 'created_at'>) => Promise<void>;
+  aprovarSaque: (saqueId: string) => Promise<void>;
+  rejeitarSaque: (saqueId: string) => Promise<void>;
+  getSaldo: (userId: string) => Saldo;
+  getSaldoUsuario: () => Saldo;
+  transferirCoins: (destinatarioId: string, valor: number) => Promise<void>;
 
-  criarChamadoSuporte: (chamado: Omit<ChamadoSuporte, 'id' | 'created_at' | 'solicitante'>) => Promise<void>;
-  aprovarChamadoSuporte: (chamadoId: string) => Promise<void>;
-  recusarChamadoSuporte: (chamadoId: string) => Promise<void>;
-  resolverChamadoSuporte: (chamadoId: string) => Promise<void>;
-  enviarMensagemSuporte: (mensagem: Omit<MensagemSuporte, 'id' | 'created_at' | 'autor'>) => Promise<void>;
-  getChamadosPorUsuario: (userId: string) => ChamadoSuporte[];
-  getMensagensPorChamado: (chamadoId: string) => MensagemSuporte[];
-  getChamadosAbertos: () => ChamadoSuporte[];
-  getChamadosResolvidos: () => ChamadoSuporte[];
+  criarChamadoSuporte: (chamado: Omit<ChamadoSuporte, 'id' | 'created_at' | 'solicitante'>) => Promise<void>;
+  aprovarChamadoSuporte: (chamadoId: string) => Promise<void>;
+  recusarChamadoSuporte: (chamadoId: string) => Promise<void>;
+  resolverChamadoSuporte: (chamadoId: string) => Promise<void>;
+  enviarMensagemSuporte: (mensagem: Omit<MensagemSuporte, 'id' | 'created_at' | 'autor'>) => Promise<void>;
+  getChamadosPorUsuario: (userId: string) => ChamadoSuporte[];
+  getMensagensPorChamado: (chamadoId: string) => MensagemSuporte[];
+  getChamadosAbertos: () => ChamadoSuporte[];
+  getChamadosResolvidos: () => ChamadoSuporte[];
 
-  loadData: () => Promise<void>;
-  loadChamadosSuporte: () => Promise<void>;
-  handleRefresh: () => Promise<void>;
-  loadUserData: (userId: string) => Promise<void>;
+  loadData: () => Promise<void>;
+  loadChamadosSuporte: () => Promise<void>;
+  handleRefresh: () => Promise<void>;
+  loadUserData: (userId: string) => Promise<void>;
 
-  isGoleiroAvaliado: (convocacaoId: string) => boolean;
-  isOrganizadorAvaliado: (convocacaoId: string) => boolean;
-  formatarData: (dateString: string) => string;
-  formatarMoeda: (valor: number) => string;
-  
-  calcularTaxaConvocacao: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
-  calcularTaxaApp: (valor: number) => number;
-  calcularValorGoleiro: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
+  isGoleiroAvaliado: (convocacaoId: string) => boolean;
+  isOrganizadorAvaliado: (convocacaoId: string) => boolean;
+  formatarData: (dateString: string) => string;
+  formatarMoeda: (valor: number) => string;
+  
+  calcularTaxaConvocacao: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
+  calcularTaxaApp: (valor: number) => number;
+  calcularValorGoleiro: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
 }
+
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -161,10 +164,13 @@ export function AppProvider({ children }: AppProviderProps) {
       case 'intermediario': valorBaseGoleiro = dbTaxas.intermediario; break;
       case 'veterano': valorBaseGoleiro = dbTaxas.goleiro; break;
     }
-    const diaSemana = dataHora.getDay();
+    
+    // <-- 2. LÓGICA CORRIGIDA AQUI
+    const diaSemana = getDay(new Date(dataHora));
+    
     const diasValorizados = [0, 1, 5, 6];
     const taxaDia = diasValorizados.includes(diaSemana) ? dbTaxas.dia : 0;
-    const hora = dataHora.getHours();
+    const hora = new Date(dataHora).getHours(); // Garante que getHours é chamado no objeto Date
     let taxaHorario = 0;
     if (hora >= 9 && hora < 14) {
       taxaHorario = dbTaxas.hora;
@@ -506,7 +512,6 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [convocacoes, getSaldo, loadData]);
 
-  // ✅ LÓGICA DE AVALIAÇÃO E PAGAMENTO CORRIGIDA
   const avaliarGoleiro = useCallback(async (convocacaoId: string, nota: number): Promise<void> => {
     try {
       if (!user) throw new Error('Usuário não autenticado');
@@ -526,7 +531,6 @@ export function AppProvider({ children }: AppProviderProps) {
       const { error: updateError } = await supabase.from('convocacoes').update({ avaliado_goleiro: true }).eq('id', convocacaoId);
       if (updateError) throw updateError;
 
-      // ✅ Nova lógica de pagamento: valor retido menos taxa do app
       const taxaApp = dbTaxas.app;
       const valorParaGoleiro = convocacao.valor_retido - taxaApp;
 

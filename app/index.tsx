@@ -184,7 +184,7 @@ export default function Index() {
           ]}
         >
           <LinearGradient
-            colors={['#667eea', '#764ba2']}
+            colors={['#34D399', '#815ba7ff']}
             style={styles.heroSection}
           >
             <Animated.View 
@@ -372,7 +372,7 @@ export default function Index() {
           </TouchableOpacity>
           
           <Text style={styles.footerText}>
-            © 2024  GoleiroON  - Conectando o futebol amador
+            © 2025  GoleiroON  - Conectando o futebol amador
           </Text>
         </LinearGradient>
       </ScrollView>

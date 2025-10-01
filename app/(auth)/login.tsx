@@ -209,7 +209,7 @@ export default function AuthPage() {
         </View>
       </View>
       <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
-        <LinearGradient colors={['#6366f1', '#8b5cf6', '#a855f7']} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient colors={['#c3ffb0ff', '#7ee771ff', '#38b918ff']} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.primaryButtonText}>{loading ? 'Entrando...' : 'Entrar'}</Text>
           {!loading && <ArrowRight size={22} color="#ffffff" />}
         </LinearGradient>
@@ -261,7 +261,7 @@ export default function AuthPage() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <LinearGradient colors={['#667eea', '#764ba2', '#6366f1', '#8b5cf6']} style={styles.background} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+      <LinearGradient colors={['#A7F3D0', '#34D399', '#6EE7B7', '#10B981']} style={styles.background} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.logoContainer}>
             <Animated.View style={{ opacity: fadeAnim }}>
@@ -323,9 +323,9 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 },
   switchButton: { alignItems: 'center', paddingVertical: 15 },
   switchText: { fontSize: 16, color: '#6b7280', fontWeight: '500' },
-  switchLink: { color: '#6366f1', fontWeight: '700', textDecorationLine: 'underline' },
+  switchLink: { color: '#747171ff', fontWeight: '700', textDecorationLine: 'underline' },
   footerContainer: { alignItems: 'center', marginTop: 30, paddingBottom: 10 }, // Ajustado para dar espaço
-  footerText: { fontSize: 12, color: '#e2e8f0', textAlign: 'center', opacity: 0.8 },
+  footerText: { fontSize: 12, color: '#141414ff', textAlign: 'center', opacity: 0.8 },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, justifyContent: 'center' },
   checkbox: { marginRight: 10 },
   checkboxText: { fontSize: 14, color: '#6b7280' },

@@ -118,7 +118,7 @@ export default function LoadingScreen() {
         {/* Logo with pulse animation */}
         <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
           <Image 
-            source={require('@/assets/images/goleiroon.png')}
+            source={require('@/assets/images/newicone.png')}
             style={styles.logo} 
             accessibilityLabel="GoleiroON Logo"
           />

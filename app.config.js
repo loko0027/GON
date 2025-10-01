@@ -2,7 +2,7 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "2.09.07",
+  version: "3.0.01",
   orientation: "portrait",
   icon: "./assets/images/newicone.png",
 

@@ -1,6 +1,8 @@
 import { Alert } from 'react-native';
+// ===== ADIÇÃO: Importa o supabase para chamar a Edge Function =====
+import { supabase } from '@/lib/supabase';
 
-// Tipos de notificação
+// Tipos de notificação (sem alteração)
 export type NotificationType = 
   | 'new_convocacao'
   | 'convocacao_aceita'
@@ -20,31 +22,51 @@ export type NotificationType =
   | 'conta_aprovada'
   | 'conta_rejeitada';
 
+// Interface de dados (alterada para ser mais flexível, não exige mais 'message')
 export interface NotificationData {
-  message: string;
   [key: string]: any;
 }
 
 export const notificationService = {
-  // Enviar notificação para um usuário
+  // ===== FUNÇÃO MODIFICADA PARA FUNCIONAR DE VERDADE =====
   async sendPushNotification(
     userId: string, 
     type: NotificationType, 
     data: NotificationData
   ): Promise<void> {
     try {
-      // Aqui você integraria com seu serviço de push notification
-      // Por exemplo: OneSignal, Expo Notifications, etc.
-      console.log(`Notificação enviada para ${userId}:`, { type, data });
+      // 1. Pega a mensagem correta baseada no tipo de notificação
+      const message = this.getNotificationMessage(type, data);
       
-      // Simulação de envio
-      // await yourNotificationService.send({ userId, type, data });
+      // 2. Pega o título (pode ser passado nos dados ou usa um padrão)
+      const title = data.title || 'GoleiroON - Nova Atividade!';
+
+      console.log(`Disparando Edge Function 'send-notification' para o usuário ${userId}`);
+      
+      // 3. Chama a sua Edge Function 'send-notification' no Supabase
+      const { error } = await supabase.functions.invoke('send-notification', {
+        body: {
+          userId: userId,
+          title: title,
+          message: message,
+        },
+      });
+
+      if (error) {
+        throw error; // Joga o erro para ser pego pelo bloco catch abaixo
+      }
+
+      console.log('Edge Function chamada com sucesso.');
+
     } catch (error) {
-      console.error('Erro ao enviar notificação:', error);
+      console.error('Erro ao chamar a Edge Function de notificação:', error);
+      // Opcional: Você pode querer avisar o usuário que a notificação falhou,
+      // mas a ação principal (ex: convocação) foi concluída.
+      // Alert.alert("Aviso", "A ação foi concluída, mas não foi possível enviar a notificação.");
     }
   },
 
-  // Notificar múltiplos usuários
+  // Notificar múltiplos usuários (sem alteração, agora funciona de verdade)
   async notifyMultipleUsers(
     userIds: string[], 
     type: NotificationType, 
@@ -60,7 +82,7 @@ export const notificationService = {
     }
   },
 
-  // Mensagens padrão para cada tipo de notificação
+  // Mensagens padrão para cada tipo de notificação (sem alteração)
   getNotificationMessage(type: NotificationType, data: any): string {
     const messages = {
       'new_convocacao': `Nova convocação de ${data.organizadorNome} - Valor: ${data.valor} coins`,
@@ -78,14 +100,14 @@ export const notificationService = {
       'novo_chamado': `Novo chamado de suporte de ${data.solicitante}`,
       'chamado_atualizado': `Seu chamado foi atualizado: ${data.status}`,
       'nova_mensagem_suporte': `Nova mensagem no chamado de suporte`,
-      'conta_aprovada': 'Sua conta foi aprovada! Bem-vindo ao app.',
-      'conta_rejeitada': 'Sua conta foi rejeitada. Entre em contato conosco.'
+      'conta_aprovada': 'Sua conta foi aprovada! Bem-vindo ao GoleiroON.',
+      'conta_rejeitada': 'Sua conta foi rejeitada. Entre em contato com o suporte.'
     };
 
     return messages[type] || 'Nova notificação';
   }
 };
 
-// Exportações para compatibilidade
+// Exportações para compatibilidade (sem alteração)
 export const sendPushNotification = notificationService.sendPushNotification;
 export const notifyMultipleUsers = notificationService.notifyMultipleUsers;

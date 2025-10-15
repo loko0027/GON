@@ -11,7 +11,7 @@ import React, {
 import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDay } from 'date-fns'; // <-- 1. IMPORTAÇÃO ADICIONADA
+import { getDay } from 'date-fns';
 import {
   Convocacao,
   CategoriaAvaliacao,
@@ -23,79 +23,86 @@ import {
   User,
 } from '@/types';
 
-// ... (o resto da interface AppContextType permanece o mesmo) ...
-
+// ===== INÍCIO DA MODIFICAÇÃO =====
+// A interface foi atualizada para refletir a nova função de cálculo.
 interface AppContextType {
-  convocacoes: Convocacao[];
-  saldos: Saldo[];
-  categorias: CategoriaAvaliacao[];
-  recargas: RecargaCoins[];
-  saques: SaquePix[];
-  chamadosSuporte: ChamadoSuporte[];
-  mensagensSuporte: MensagemSuporte[];
-  allAppUsers: User[];
-  refreshing: boolean;
-  loading: boolean;
+  convocacoes: Convocacao[];
+  saldos: Saldo[];
+  categorias: CategoriaAvaliacao[];
+  recargas: RecargaCoins[];
+  saques: SaquePix[];
+  chamadosSuporte: ChamadoSuporte[];
+  mensagensSuporte: MensagemSuporte[];
+  allAppUsers: User[];
+  refreshing: boolean;
+  loading: boolean;
 
-  getAllUsers: () => User[];
-  getUsuariosPendentes: () => User[];
-  aprovarUsuario: (userId: string) => Promise<void>;
-  rejeitarUsuario: (userId: string) => Promise<void>;
-  getUsuarioById: (userId: string) => User | undefined;
-  atualizarUsuario: (userId: string, updates: Partial<User>) => Promise<void>;
+  getAllUsers: () => User[];
+  getUsuariosPendentes: () => User[];
+  aprovarUsuario: (userId: string) => Promise<void>;
+  rejeitarUsuario: (userId: string) => Promise<void>;
+  getUsuarioById: (userId: string) => User | undefined;
+  atualizarUsuario: (userId: string, updates: Partial<User>) => Promise<void>;
 
-  getSaquesPendentes: () => SaquePix[];
-  getRecargasPendentes: () => RecargaCoins[];
-  getTransacoesUsuario: () => {
-    recargas: RecargaCoins[];
-    saques: SaquePix[];
-  };
+  getSaquesPendentes: () => SaquePix[];
+  getRecargasPendentes: () => RecargaCoins[];
+  getTransacoesUsuario: () => {
+    recargas: RecargaCoins[];
+    saques: SaquePix[];
+  };
 
-  fetchConvocacoes: () => Promise<Convocacao[]>;
-  criarConvocacao: (convocacao: Omit<Convocacao, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  aceitarConvocacao: (convocacaoId: string) => Promise<void>;
-  recusarConvocacao: (convocacaoId: string) => Promise<void>;
-  avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
-  avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
-  confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
-  getConvocacoesPorUsuario: (userId: string) => Convocacao[];
-  getConvocacoesAtivas: () => Convocacao[];
-  getConvocacoesHistorico: () => Convocacao[];
+  fetchConvocacoes: () => Promise<Convocacao[]>;
+  criarConvocacao: (convocacao: Omit<Convocacao, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  aceitarConvocacao: (convocacaoId: string) => Promise<void>;
+  recusarConvocacao: (convocacaoId: string) => Promise<void>;
+  avaliarGoleiro: (convocacaoId: string, nota: number) => Promise<void>;
+  avaliarOrganizador: (convocacaoId: string, categoria: string) => Promise<void>;
+  confirmarPresenca: (convocacaoId: string, status: 'compareceu' | 'nao_compareceu') => Promise<void>;
+  getConvocacoesPorUsuario: (userId: string) => Convocacao[];
+  getConvocacoesAtivas: () => Convocacao[];
+  getConvocacoesHistorico: () => Convocacao[];
 
-  recarregarCoins: (recarga: Omit<RecargaCoins, 'id' | 'created_at'>) => Promise<void>;
-  aprovarRecarga: (recargaId: string) => Promise<void>;
-  rejeitarRecarga: (recargaId: string) => Promise<void>;
-  solicitarSaque: (saque: Omit<SaquePix, 'id' | 'created_at'>) => Promise<void>;
-  aprovarSaque: (saqueId: string) => Promise<void>;
-  rejeitarSaque: (saqueId: string) => Promise<void>;
-  getSaldo: (userId: string) => Saldo;
-  getSaldoUsuario: () => Saldo;
-  transferirCoins: (destinatarioId: string, valor: number) => Promise<void>;
+  recarregarCoins: (recarga: Omit<RecargaCoins, 'id' | 'created_at'>) => Promise<void>;
+  aprovarRecarga: (recargaId: string) => Promise<void>;
+  rejeitarRecarga: (recargaId: string) => Promise<void>;
+  solicitarSaque: (saque: Omit<SaquePix, 'id' | 'created_at'>) => Promise<void>;
+  aprovarSaque: (saqueId: string) => Promise<void>;
+  rejeitarSaque: (saqueId: string) => Promise<void>;
+  getSaldo: (userId: string) => Saldo;
+  getSaldoUsuario: () => Saldo;
+  transferirCoins: (destinatarioId: string, valor: number) => Promise<void>;
 
-  criarChamadoSuporte: (chamado: Omit<ChamadoSuporte, 'id' | 'created_at' | 'solicitante'>) => Promise<void>;
-  aprovarChamadoSuporte: (chamadoId: string) => Promise<void>;
-  recusarChamadoSuporte: (chamadoId: string) => Promise<void>;
-  resolverChamadoSuporte: (chamadoId: string) => Promise<void>;
-  enviarMensagemSuporte: (mensagem: Omit<MensagemSuporte, 'id' | 'created_at' | 'autor'>) => Promise<void>;
-  getChamadosPorUsuario: (userId: string) => ChamadoSuporte[];
-  getMensagensPorChamado: (chamadoId: string) => MensagemSuporte[];
-  getChamadosAbertos: () => ChamadoSuporte[];
-  getChamadosResolvidos: () => ChamadoSuporte[];
+  criarChamadoSuporte: (chamado: Omit<ChamadoSuporte, 'id' | 'created_at' | 'solicitante'>) => Promise<void>;
+  aprovarChamadoSuporte: (chamadoId: string) => Promise<void>;
+  recusarChamadoSuporte: (chamadoId: string) => Promise<void>;
+  resolverChamadoSuporte: (chamadoId: string) => Promise<void>;
+  enviarMensagemSuporte: (mensagem: Omit<MensagemSuporte, 'id' | 'created_at' | 'autor'>) => Promise<void>;
+  getChamadosPorUsuario: (userId: string) => ChamadoSuporte[];
+  getMensagensPorChamado: (chamadoId: string) => MensagemSuporte[];
+  getChamadosAbertos: () => ChamadoSuporte[];
+  getChamadosResolvidos: () => ChamadoSuporte[];
 
-  loadData: () => Promise<void>;
-  loadChamadosSuporte: () => Promise<void>;
-  handleRefresh: () => Promise<void>;
-  loadUserData: (userId: string) => Promise<void>;
+  loadData: () => Promise<void>;
+  loadChamadosSuporte: () => Promise<void>;
+  handleRefresh: () => Promise<void>;
+  loadUserData: (userId: string) => Promise<void>;
 
-  isGoleiroAvaliado: (convocacaoId: string) => boolean;
-  isOrganizadorAvaliado: (convocacaoId: string) => boolean;
-  formatarData: (dateString: string) => string;
-  formatarMoeda: (valor: number) => string;
-  
-  calcularTaxaConvocacao: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
-  calcularTaxaApp: (valor: number) => number;
-  calcularValorGoleiro: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date) => number;
+  isGoleiroAvaliado: (convocacaoId: string) => boolean;
+  isOrganizadorAvaliado: (convocacaoId: string) => boolean;
+  formatarData: (dateString: string) => string;
+  formatarMoeda: (valor: number) => string;
+  
+  // AQUI ESTÁ A MUDANÇA: Uma única função que retorna um objeto com todos os detalhes.
+  calcularDetalhesConvocacao: (nivelJogador: 'iniciante' | 'intermediario' | 'veterano', dataHora: Date, duracaoHoras: number) => {
+      total: number;
+      valorGoleiro: number;
+      taxaApp: number;
+      taxaDia: number;
+      taxaHora: number;
+      valorBaseGoleiro: number;
+  };
 }
+// ===== FIM DA MODIFICAÇÃO =====
 
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -117,10 +124,7 @@ export function AppProvider({ children }: AppProviderProps) {
     app: 0,
     dia: 0,
     hora: 0,
-    goleiro: 0,
-    avancado: 0,
-    meio: 0,
-    intermediario: 0,
+    taxa_goleiro: 0, 
   });
 
   const [convocacoes, setConvocacoes] = useState<Convocacao[]>([]);
@@ -150,42 +154,51 @@ export function AppProvider({ children }: AppProviderProps) {
   const dataLoadedForUserRef = useRef<string | null>(null);
   const dataClearedForNullUserRef = useRef(false);
 
-  const calcularTaxaApp = useCallback((): number => {
-    return dbTaxas.app;
-  }, [dbTaxas]);
-
-  const calcularValorGoleiro = useCallback((
+  // ===== INÍCIO DA MODIFICAÇÃO =====
+  // As funções de cálculo foram centralizadas em uma única função que retorna um objeto detalhado.
+  const calcularDetalhesConvocacao = useCallback((
     nivelJogador: 'iniciante' | 'intermediario' | 'veterano',
-    dataHora: Date
-  ): number => {
-    let valorBaseGoleiro = 0;
+    dataHora: Date,
+    duracaoHoras: number
+  ) => {
+    // 1. Pega os valores base do banco de dados
+    const valorBase = dbTaxas.taxa_goleiro;
+    const taxaApp = dbTaxas.app;
+
+    // 2. Calcula os bônus e taxas variáveis por hora
+    let bonusNivel = 0;
     switch (nivelJogador) {
-      case 'iniciante': valorBaseGoleiro = dbTaxas.avancado; break;
-      case 'intermediario': valorBaseGoleiro = dbTaxas.intermediario; break;
-      case 'veterano': valorBaseGoleiro = dbTaxas.goleiro; break;
+      case 'iniciante': bonusNivel = 10; break;
+      case 'intermediario': bonusNivel = 20; break;
+      case 'veterano': bonusNivel = 30; break;
     }
-    
-    // <-- 2. LÓGICA CORRIGIDA AQUI
-    const diaSemana = getDay(new Date(dataHora));
-    
-    const diasValorizados = [0, 1, 5, 6];
-    const taxaDia = diasValorizados.includes(diaSemana) ? dbTaxas.dia : 0;
-    const hora = new Date(dataHora).getHours(); // Garante que getHours é chamado no objeto Date
-    let taxaHorario = 0;
-    if (hora >= 9 && hora < 14) {
-      taxaHorario = dbTaxas.hora;
-    }
-    return valorBaseGoleiro + taxaDia + taxaHorario;
-  }, [dbTaxas]);
 
-  const calcularTaxaConvocacao = useCallback((
-    nivelJogador: 'iniciante' | 'intermediario' | 'veterano',
-    dataHora: Date
-  ): number => {
-    const valorGoleiro = calcularValorGoleiro(nivelJogador, dataHora);
-    const taxaApp = calcularTaxaApp();
-    return valorGoleiro + taxaApp;
-  }, [calcularValorGoleiro, calcularTaxaApp]);
+    const diaSemana = getDay(new Date(dataHora));
+    const diasValorizados = [0, 1, 5, 6]; // Dom, Seg, Sex, Sáb
+    const taxaDiaPorHora = diasValorizados.includes(diaSemana) ? dbTaxas.dia : 0;
+    
+    const hora = new Date(dataHora).getHours();
+    const taxaHoraPorHora = (hora >= 9 && hora < 15) ? dbTaxas.hora : 0;
+
+    // 3. Calcula os totais com base nos componentes, multiplicando pela duração
+    const valorBaseGoleiroFinal = (valorBase + bonusNivel) * duracaoHoras;
+    const taxaDiaFinal = taxaDiaPorHora * duracaoHoras;
+    const taxaHoraFinal = taxaHoraPorHora * duracaoHoras;
+    
+    const valorFinalGoleiro = valorBaseGoleiroFinal + taxaDiaFinal + taxaHoraFinal;
+    const totalFinal = valorFinalGoleiro + taxaApp;
+
+    // 4. Retorna um objeto com TUDO detalhado para ser usado na tela
+    return {
+      total: totalFinal,
+      valorGoleiro: valorFinalGoleiro,
+      taxaApp: taxaApp,
+      taxaDia: taxaDiaFinal,
+      taxaHora: taxaHoraFinal,
+      valorBaseGoleiro: valorBaseGoleiroFinal,
+    };
+  }, [dbTaxas]);
+  // ===== FIM DA MODIFICAÇÃO =====
 
   const fetchConvocacoes = useCallback(async (): Promise<Convocacao[]> => {
     try {
@@ -225,7 +238,7 @@ export function AppProvider({ children }: AppProviderProps) {
       try {
         const { data, error } = await supabase
           .from('configuracoes_taxas')
-          .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro, taxa_avancado, taxa_meio, taxa_intermediario')
+          .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro')
           .eq('id', 1)
           .single();
         if (error) throw error;
@@ -234,10 +247,7 @@ export function AppProvider({ children }: AppProviderProps) {
             app: data.taxa_app,
             dia: data.taxa_dia,
             hora: data.taxa_hora,
-            goleiro: data.taxa_goleiro,
-            avancado: data.taxa_avancado,
-            meio: data.taxa_meio,
-            intermediario: data.taxa_intermediario,
+            taxa_goleiro: data.taxa_goleiro,
           });
         }
       } catch (e) {
@@ -403,7 +413,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('usuarios').update({ status_aprovacao: 'aprovado' }).eq('id', userId);
       if (error) throw error;
-      // Notificação removida
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário aprovado com sucesso!');
     } catch (e) {
@@ -416,7 +425,6 @@ export function AppProvider({ children }: AppProviderProps) {
     try {
       const { error } = await supabase.from('usuarios').update({ status_aprovacao: 'rejeitado' }).eq('id', userId);
       if (error) throw error;
-      // Notificação removida
       await loadAllUsers();
       Alert.alert('Sucesso', 'Usuário rejeitado.');
     } catch (e) {
@@ -465,7 +473,6 @@ export function AppProvider({ children }: AppProviderProps) {
         saldo_coins: saldoUsuario.saldo_coins - convocacao.valor_retido,
         saldo_retido: (saldoUsuario.saldo_retido || 0) + convocacao.valor_retido
       }).eq('usuario_id', user.id);
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Convocação criada com sucesso!');
     } catch (error: any) {
@@ -481,7 +488,6 @@ export function AppProvider({ children }: AppProviderProps) {
       if (!convocacao) throw new Error('Convocação não encontrada');
       const { error } = await supabase.from('convocacoes').update({ status: 'aceito', goleiro_id: user.id }).eq('id', convocacaoId);
       if (error) throw error;
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Convocação aceita com sucesso!');
     } catch (error: any) {
@@ -503,7 +509,6 @@ export function AppProvider({ children }: AppProviderProps) {
           saldo_retido: saldoOrganizador.saldo_retido - convocacao.valor_retido
         }).eq('usuario_id', convocacao.organizador_id);
       }
-      // Notificação removida
       await loadData();
       Alert.alert('Sucesso', 'Convocação recusada com sucesso!');
     } catch (error: any) {
@@ -553,7 +558,6 @@ export function AppProvider({ children }: AppProviderProps) {
       Alert.alert('Erro', error.message || 'Não foi possível avaliar o goleiro');
     }
   }, [user, convocacoes, getSaldo, loadData, dbTaxas]);
-
 
   const avaliarOrganizador = useCallback(async (convocacaoId: string, categoria: string): Promise<void> => {
     try {
@@ -826,6 +830,8 @@ export function AppProvider({ children }: AppProviderProps) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   }, []);
 
+  // ===== INÍCIO DA MODIFICAÇÃO =====
+  // O valor do contexto foi atualizado para expor a nova função de cálculo.
   const contextValue = useMemo(() => ({
     convocacoes, saldos, categorias, recargas, saques, chamadosSuporte, mensagensSuporte, allAppUsers, refreshing, loading,
     getAllUsers, getUsuariosPendentes, aprovarUsuario, rejeitarUsuario, getUsuarioById, atualizarUsuario, getSaquesPendentes,
@@ -835,7 +841,7 @@ export function AppProvider({ children }: AppProviderProps) {
     transferirCoins, criarChamadoSuporte, aprovarChamadoSuporte, recusarChamadoSuporte, resolverChamadoSuporte,
     enviarMensagemSuporte, getChamadosPorUsuario, getMensagensPorChamado, getChamadosAbertos, getChamadosResolvidos,
     loadData, loadChamadosSuporte, handleRefresh, loadUserData, isGoleiroAvaliado, isOrganizadorAvaliado, formatarData,
-    formatarMoeda, calcularTaxaConvocacao, calcularTaxaApp, calcularValorGoleiro,
+    formatarMoeda, calcularDetalhesConvocacao, // AQUI ESTÁ A MUDANÇA
   }), [
     convocacoes, saldos, categorias, recargas, saques, chamadosSuporte, mensagensSuporte, allAppUsers, refreshing, loading,
     getAllUsers, getUsuariosPendentes, aprovarUsuario, rejeitarUsuario, getUsuarioById, atualizarUsuario, getSaquesPendentes,
@@ -845,8 +851,9 @@ export function AppProvider({ children }: AppProviderProps) {
     transferirCoins, criarChamadoSuporte, aprovarChamadoSuporte, recusarChamadoSuporte, resolverChamadoSuporte,
     enviarMensagemSuporte, getChamadosPorUsuario, getMensagensPorChamado, getChamadosAbertos, getChamadosResolvidos,
     loadData, loadChamadosSuporte, handleRefresh, loadUserData, isGoleiroAvaliado, isOrganizadorAvaliado, formatarData,
-    formatarMoeda, calcularTaxaConvocacao, calcularTaxaApp, calcularValorGoleiro,
+    formatarMoeda, calcularDetalhesConvocacao, // AQUI ESTÁ A MUDANÇA
   ]);
+  // ===== FIM DA MODIFICAÇÃO =====
 
   return (
     <AppContext.Provider value={contextValue}>

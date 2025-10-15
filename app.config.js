@@ -1,36 +1,31 @@
+import 'dotenv/config';
+
 export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "3.0.01",
+  version: "4.0.02",
   orientation: "portrait",
   icon: "./assets/images/newicone.png",
 
-  // ✅ CONFIGURAÇÃO DA TELA DE SPLASH ADICIONADA
   splash: {
-    image: "./assets/images/Splashinew.png", // Apontando para a sua imagem
-    resizeMode: "contain",                  // Garante que a imagem não seja cortada
-    backgroundColor: "#FFFFFF",             // Cor de fundo (pode alterar se quiser)
+    image: "./assets/images/newicone.png",
+    resizeMode: "contain",
+    backgroundColor: "#8b5cf6",
   },
 
   scheme: "goleiroon",
   userInterfaceStyle: "automatic",
 
   notification: {
-    iosDisplayInForeground: true,
-  },
-
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: "com.pablo095.goleiroon",
-    infoPlist: {
-      UIBackgroundModes: ["remote-notification"],
-    },
+    iosDisplayInForeground: true, 
   },
 
   android: {
     package: "com.pablo095.goleiroon",
-    versionCode: 1,
+    // ===== ALTERAÇÃO IMPORTANTE E OBRIGATÓRIA =====
+    versionCode: 4, // <-- AUMENTEI DE 1 PARA 2. AUMENTE PARA O PRÓXIMO NÚMERO DISPONÍVEL.
+    // ===============================================
     permissions: [
       "CAMERA",
       "RECORD_AUDIO",
@@ -38,15 +33,13 @@ export default ({ config }) => ({
       "READ_EXTERNAL_STORAGE",
       "ACCESS_FINE_LOCATION",
       "ACCESS_COARSE_LOCATION",
+      "com.google.android.c2dm.permission.RECEIVE",
     ],
     adaptiveIcon: {
       foregroundImage: "./assets/images/newicone.png",
       backgroundColor: "#FFFFFF",
     },
-    notification: {
-      icon: "./assets/images/Sino.png",
-      color: "#FF0000",
-    },
+    googleServicesFile: "./google-services.json",
   },
 
   web: {
@@ -62,7 +55,9 @@ export default ({ config }) => ({
     [
       "expo-notifications",
       {
-        mode: "production",
+        "icon": "./assets/images/Sino.png",
+        "color": "#FF0000",
+        "mode": "production",
       },
     ],
     [

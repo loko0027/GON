@@ -77,6 +77,7 @@ export default function HomeTab() {
     setRefreshing(false);
   };
 
+  // ===== FUNÇÃO DO RANKING CORRIGIDA =====
   const fetchRanking = async () => {
     setLoadingRanking(true);
     try {
@@ -86,7 +87,6 @@ export default function HomeTab() {
       const endOfMonth = new Date(startOfMonth);
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
 
-      // Agora usamos a view
       const { data, error } = await supabase
         .from('avaliacoes_goleiro_view')
         .select('*')
@@ -105,28 +105,46 @@ export default function HomeTab() {
         grouped[id].sum += a.nota;
       });
 
-      // Só exibe quem jogou mais de 5 partidas
-      const rank: RankingItem[] = Object.entries(grouped)
-        .filter(([_, v]) => v.total > 5)
-        .map(([id, v]) => ({
+      // 1. Mapeia TODOS os goleiros, calculando a média
+      const allGoleirosCalculados: RankingItem[] = Object.entries(grouped).map(
+        ([id, v]) => ({
           goleiro_id: id,
           goleiro_nome: v.nome,
           totalJogos: v.total,
           mediaAvaliacao: v.sum / v.total,
-        }))
-        .sort((a, b) => b.mediaAvaliacao - a.mediaAvaliacao);
+        })
+      );
 
-      setRanking(rank);
+      // 2. Ordena TODOS os goleiros pela maior média. Em caso de empate, mais jogos vence.
+      const rankingCompletoOrdenado = allGoleirosCalculados.sort((a, b) => {
+        if (b.mediaAvaliacao !== a.mediaAvaliacao) {
+          return b.mediaAvaliacao - a.mediaAvaliacao;
+        }
+        return b.totalJogos - a.totalJogos;
+      });
+
+      // 3. Separa o pódio (os 3 primeiros) do resto
+      const top3 = rankingCompletoOrdenado.slice(0, 3);
+      const oResto = rankingCompletoOrdenado.slice(3);
+
+      // 4. Aplica a regra de > 5 jogos APENAS para o resto do ranking
+      const oRestoFiltrado = oResto.filter(goleiro => goleiro.totalJogos > 5);
+
+      // 5. Junta o pódio garantido com o resto filtrado
+      const rankFinal = [...top3, ...oRestoFiltrado];
+
+      setRanking(rankFinal);
     } catch (err: any) {
       console.error('Erro fetchRanking', err.message);
     }
     setLoadingRanking(false);
   };
+  // =========================================
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchUpdates();
-    await fetchRanking();
+    await Promise.all([fetchUpdates(), fetchRanking()]);
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -172,7 +190,8 @@ export default function HomeTab() {
       setFormTitulo('');
       setFormDescricao('');
       setFormTipo('novidade');
-      fetchUpdates();
+      // fetchUpdates() é chamado automaticamente pelo realtime, mas podemos forçar
+      onRefresh(); 
     }
     setLoading(false);
   };
@@ -189,7 +208,6 @@ export default function HomeTab() {
           if (error) Alert.alert('Erro ao deletar', error.message);
           else {
             Alert.alert('Sucesso', 'Atualização removida');
-            fetchUpdates();
           }
           setLoading(false);
         },
@@ -206,10 +224,10 @@ export default function HomeTab() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#0971d8ff" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingTop: 20, paddingHorizontal: 20 }}
+        contentContainerStyle={{ paddingTop: 20, paddingHorizontal: 20, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={styles.title}>Atualizações do App</Text>
@@ -217,7 +235,7 @@ export default function HomeTab() {
           Fique por dentro das novidades, melhorias e manutenções recentes.
         </Text>
 
-        {loading && !refreshing && <ActivityIndicator size="large" color="#2563EB" />}
+        {loading && !refreshing && <ActivityIndicator size="large" color="#2563EB" style={{ marginVertical: 20 }} />}
 
         {isAdmin && (
           <View style={styles.form}>
@@ -256,7 +274,7 @@ export default function HomeTab() {
 
             <Text style={styles.label}>Descrição:</Text>
             <TextInput
-              style={[styles.input, { height: 80 }]}
+              style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
               multiline
               value={formDescricao}
               onChangeText={setFormDescricao}
@@ -268,7 +286,7 @@ export default function HomeTab() {
               onPress={handleAddUpdate}
               disabled={loading}
             >
-              <Text style={styles.buttonText}>Adicionar Atualização</Text>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Adicionar Atualização</Text>}
             </TouchableOpacity>
           </View>
         )}
@@ -299,8 +317,13 @@ export default function HomeTab() {
 
         {/* ================= RANKING MENSAL ================= */}
         <Text style={[styles.title, { marginTop: 30 }]}>🏆 Ranking Mensal de Goleiros</Text>
+        <Text style={styles.subtitle}>
+          Top goleiros do mês com mais de 5 jogos (exceto o pódio).
+        </Text>
         {loadingRanking ? (
-          <ActivityIndicator size="large" color="#10B981" />
+          <ActivityIndicator size="large" color="#10B981" style={{ marginVertical: 20 }}/>
+        ) : ranking.length === 0 ? (
+          <Text style={styles.noDataText}>Ainda não há dados suficientes para gerar o ranking do mês.</Text>
         ) : (
           ranking.map((g, index) => (
             <Animated.View
@@ -317,7 +340,8 @@ export default function HomeTab() {
                       : index === 2
                       ? '#CD7F32'
                       : '#E5E7EB',
-                  borderWidth: index < 3 ? 2 : 1,
+                  borderWidth: index < 3 ? 3 : 1,
+                  backgroundColor: index < 3 ? '#fff' : '#f9fafb'
                 },
               ]}
               onTouchStart={handlePressIn}
@@ -341,48 +365,43 @@ export default function HomeTab() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#ffffffff' },
-  container: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 6, color: '#000000ff' },
-  subtitle: { fontSize: 16, color: '#000000ff', marginBottom: 20 },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: '#FFFFFF'},
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 6, color: '#1f2937' },
+  subtitle: { fontSize: 16, color: '#6b7280', marginBottom: 20 },
+  noDataText: { textAlign: 'center', color: '#6b7280', marginVertical: 20, fontSize: 14},
   card: {
-    backgroundColor: '#ffffffff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
   },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginBottom: 8 },
   badgeText: { color: 'white', fontWeight: '600', fontSize: 13 },
   cardTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  cardDesc: { fontSize: 15, color: '#4B5563', marginBottom: 12 },
+  cardDesc: { fontSize: 15, color: '#4B5563', marginBottom: 12, lineHeight: 22 },
   cardDate: { fontSize: 13, color: '#9CA3AF', textAlign: 'right' },
   form: {
-    backgroundColor: '#ffffffff',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 14,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
   },
   label: { fontWeight: '700', marginBottom: 6, color: '#374151' },
-  tipoOptions: { flexDirection: 'row', marginBottom: 12 },
-  tipoOption: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#d1d5db', marginRight: 10 },
-  tipoOptionText: { color: '#374151' },
-  input: { backgroundColor: '#F9FAFB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12, borderWidth: 1, borderColor: '#d1d5db', fontSize: 16, color: '#111827' },
+  tipoOptions: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12, gap: 8 },
+  tipoOption: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#d1d5db' },
+  tipoOptionText: { color: '#374151', fontWeight: '500' },
+  input: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#d1d5db', fontSize: 16, color: '#111827' },
   button: { backgroundColor: '#2563EB', padding: 12, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   buttonText: { color: 'white', fontWeight: '700', fontSize: 16 },
-  deleteButton: { marginTop: 10, paddingVertical: 6, backgroundColor: '#EF4444', borderRadius: 8, alignItems: 'center' },
-  deleteButtonText: { color: 'white', fontWeight: '700' },
-  rankCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 14, marginBottom: 12, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  rankPosition: { fontSize: 18, fontWeight: '700', marginRight: 12 },
+  deleteButton: { marginTop: 10, alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#EF4444', borderRadius: 8 },
+  deleteButtonText: { color: 'white', fontWeight: '600', fontSize: 12 },
+  rankCard: { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 12, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  rankPosition: { fontSize: 18, fontWeight: '700', color: '#374151', width: 60 },
   rankInfo: { flex: 1 },
   rankNome: { fontSize: 16, fontWeight: '700', color: '#111827' },
   rankStats: { fontSize: 14, color: '#6B7280' },

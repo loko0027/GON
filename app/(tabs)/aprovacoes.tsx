@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -7,29 +7,46 @@ import {
   CircleCheck as CheckCircle, Circle as XCircle, Clock
 } from 'lucide-react-native';
 
-// Definição da interface para os dados do usuário a ser aprovado/rejeitado
+// Definição da interface (sem alterações)
 interface UserToProcess {
   id: string;
   nome: string;
-  action: 'aprovar' | 'rejeitar'; // Indica se é para aprovar ou rejeitar
+  action: 'aprovar' | 'rejeitar';
 }
 
 export default function AprovacoesTab() {
   const { user } = useAuth();
+  // 1. Pegamos a função 'loadData' do AppContext para ser usada no refresh
   const {
     getAllUsers,
     getUsuariosPendentes,
     aprovarUsuario,
-    rejeitarUsuario
+    rejeitarUsuario,
+    loadData
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'pendente' | 'aprovado' | 'rejeitado'>('pendente');
   const [filterTipo, setFilterTipo] = useState<'todos' | 'goleiro' | 'organizador'>('todos');
-
-  // Novos estados para controlar o modal
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [currentUserToProcess, setCurrentUserToProcess] = useState<UserToProcess | null>(null);
+
+  // 2. Adicionamos o estado para controlar a animação do refresh
+  const [refreshing, setRefreshing] = useState(false);
+
+  // 3. Adicionamos a função 'onRefresh' que será chamada ao puxar a tela
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true); // Ativa o indicador de loading
+    try {
+      // Recarrega todos os dados do AppContext, incluindo a lista de usuários
+      await loadData();
+    } catch (error) {
+        console.error("Erro durante o refresh:", error);
+        Alert.alert("Erro", "Não foi possível atualizar a lista de usuários.");
+    } finally {
+        setRefreshing(false); // Desativa o indicador de loading ao finalizar
+    }
+  }, [loadData]); // A função depende do 'loadData' do contexto
 
   if (user?.tipo_usuario !== 'admin') {
     return (
@@ -45,53 +62,41 @@ export default function AprovacoesTab() {
   const allUsers = getAllUsers();
 
   const filteredUsers = allUsers.filter(usuario => {
-    // Normalização dos dados para comparação
     const statusNormalizado = usuario.status_aprovacao?.toLowerCase().trim() || 'pendente';
     const tipoNormalizado = usuario.tipo_usuario?.toLowerCase().trim() || '';
-
-    // Condições de filtro
     const matchesSearch =
       usuario.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
       usuario.email.toLowerCase().includes(searchQuery.toLowerCase());
-
     const matchesStatus =
       filterStatus === 'todos' || statusNormalizado === filterStatus;
-
     const matchesTipo =
       filterTipo === 'todos' || tipoNormalizado === filterTipo;
-
-    // Excluir admins da lista de aprovação, pois eles não precisam ser aprovados por outros admins
     const notAdmin = tipoNormalizado !== 'admin';
-
     return matchesSearch && matchesStatus && matchesTipo && notAdmin;
   });
 
-  // Função para abrir o modal com os dados do usuário e a ação
   const openConfirmationModal = (userId: string, nome: string, action: 'aprovar' | 'rejeitar') => {
     console.log(`[UI - Clique] Botão ${action.toUpperCase()} clicado para o usuário: ${nome} (ID: ${userId})`);
     setCurrentUserToProcess({ id: userId, nome: nome, action: action });
     setIsModalVisible(true);
   };
 
-  // Função que será chamada ao confirmar no modal
   const handleConfirmAction = async () => {
-    console.log('[AprovacoesTab - handleConfirmAction] Função de confirmação do modal iniciada.'); // LOG
+    console.log('[AprovacoesTab - handleConfirmAction] Função de confirmação do modal iniciada.');
     if (!currentUserToProcess) {
       console.error("[AprovacoesTab - handleConfirmAction] Erro: Nenhum usuário selecionado no modal.");
       return;
     }
-
     const { id, nome, action } = currentUserToProcess;
-    console.log(`[AprovacoesTab - handleConfirmAction] Confirmando ${action} para ${nome} (ID: ${id})`); // LOG
-
+    console.log(`[AprovacoesTab - handleConfirmAction] Confirmando ${action} para ${nome} (ID: ${id})`);
     try {
       if (action === 'aprovar') {
-        console.log('[AprovacoesTab - handleConfirmAction] Tentando aprovar usuário via AppContext...'); // LOG
+        console.log('[AprovacoesTab - handleConfirmAction] Tentando aprovar usuário via AppContext...');
         await aprovarUsuario(id);
         Alert.alert('Sucesso', 'Usuário aprovado com sucesso!');
         console.log(`[AprovacoesTab - handleConfirmAction] Usuário ${nome} (ID: ${id}) aprovado com sucesso via AppContext!`);
-      } else { // action === 'rejeitar'
-        console.log('[AprovacoesTab - handleConfirmAction] Tentando rejeitar usuário via AppContext...'); // LOG
+      } else {
+        console.log('[AprovacoesTab - handleConfirmAction] Tentando rejeitar usuário via AppContext...');
         await rejeitarUsuario(id);
         Alert.alert('Sucesso', 'Usuário rejeitado com sucesso!');
         console.log(`[AprovacoesTab - handleConfirmAction] Usuário ${nome} (ID: ${id}) rejeitado com sucesso via AppContext!`);
@@ -101,12 +106,10 @@ export default function AprovacoesTab() {
       Alert.alert('Erro', `Não foi possível ${action} o usuário.`);
       console.log(`[AprovacoesTab - handleConfirmAction] Erro ao tentar ${action} usuário ${nome} (ID: ${id}):`, error);
     } finally {
-      // Fecha o modal e limpa os dados após a tentativa
       setIsModalVisible(false);
       setCurrentUserToProcess(null);
     }
   };
-
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -165,8 +168,6 @@ export default function AprovacoesTab() {
             placeholderTextColor="#94a3b8"
           />
         </View>
-
-        {/* Filtros de status */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabs}>
           {[
             { key: 'pendente', label: 'Pendentes', color: '#f59e0b' },
@@ -194,8 +195,6 @@ export default function AprovacoesTab() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-
-        {/* Filtros de tipo de usuário */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabs}>
           {[
             { key: 'todos', label: 'Todos Tipos', emoji: '👥' },
@@ -222,24 +221,34 @@ export default function AprovacoesTab() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.usersList} showsVerticalScrollIndicator={false}>
+      {/* 4. Adicionamos a propriedade 'refreshControl' ao ScrollView da lista */}
+      <ScrollView 
+        style={styles.usersList} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#059669"]} // Cor do indicador no Android
+            tintColor={"#059669"} // Cor do indicador no iOS
+          />
+        }
+      >
         {filteredUsers.length === 0 ? (
           <View style={styles.emptyState}>
             <UserCheck size={64} color="#cbd5e1" />
             <Text style={styles.emptyTitle}>Nenhum usuário encontrado</Text>
-            <Text style={styles.emptySubtitle}>Ajuste os filtros para ver mais resultados</Text>
+            <Text style={styles.emptySubtitle}>Ajuste os filtros ou puxe para atualizar</Text>
           </View>
         ) : (
           filteredUsers.map((usuario) => {
             const status = usuario.status_aprovacao?.toLowerCase().trim() || 'pendente';
-
             return (
               <View key={usuario.id} style={styles.userCard}>
                 <View style={styles.userHeader}>
                   <View style={styles.userAvatar}>
                     <Text style={styles.userAvatarText}>{getTipoEmoji(usuario.tipo_usuario)}</Text>
                   </View>
-
                   <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
                       <Text style={styles.userName}>{usuario.nome}</Text>
@@ -250,11 +259,9 @@ export default function AprovacoesTab() {
                         </Text>
                       </View>
                     </View>
-
                     <Text style={styles.userType}>
                       {usuario.tipo_usuario.charAt(0).toUpperCase() + usuario.tipo_usuario.slice(1)}
                     </Text>
-
                     <View style={styles.userDetails}>
                       <View style={styles.detailRow}>
                         <Mail size={14} color="#64748b" />
@@ -277,7 +284,6 @@ export default function AprovacoesTab() {
                     </View>
                   </View>
                 </View>
-
                 {status === 'pendente' && (
                   <View style={styles.actionButtons}>
                     <TouchableOpacity
@@ -287,7 +293,6 @@ export default function AprovacoesTab() {
                       <XCircle size={16} color="#fff" />
                       <Text style={styles.buttonText}>Rejeitar</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       style={styles.approveButton}
                       onPress={() => openConfirmationModal(usuario.id, usuario.nome, 'aprovar')}
@@ -303,7 +308,6 @@ export default function AprovacoesTab() {
         )}
       </ScrollView>
 
-      {/* --- MODAL DE CONFIRMAÇÃO --- */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -321,7 +325,6 @@ export default function AprovacoesTab() {
             <Text style={modalStyles.modalText}>
               Deseja realmente {currentUserToProcess?.action === 'aprovar' ? 'aprovar' : 'rejeitar'} <Text style={{fontWeight:'bold'}}>{currentUserToProcess?.nome}</Text>?
             </Text>
-
             <View style={modalStyles.modalActionButtons}>
               <TouchableOpacity
                 style={[modalStyles.modalButton, modalStyles.buttonCancel]}
@@ -332,13 +335,11 @@ export default function AprovacoesTab() {
               >
                 <Text style={modalStyles.buttonText}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[
                   modalStyles.modalButton,
                   currentUserToProcess?.action === 'aprovar' ? modalStyles.buttonApprove : modalStyles.buttonReject
                 ]}
-                // --- AQUI ESTÁ A CORREÇÃO COM O LOG DE VERIFICAÇÃO FINAL ---
                 onPress={() => {
                   console.log(`[UI - Clique no Modal] Botão CONFIRMAR ${currentUserToProcess?.action} clicado.`);
                   handleConfirmAction();
@@ -356,13 +357,13 @@ export default function AprovacoesTab() {
   );
 }
 
-// --- ESTILOS DO MODAL ---
+// Seus estilos (sem alterações)
 const modalStyles = StyleSheet.create({
   centeredView: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)', // Fundo escuro transparente
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalView: {
     margin: 20,
@@ -419,7 +420,6 @@ const modalStyles = StyleSheet.create({
   },
 });
 
-// --- ESTILOS GERAIS ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -11,7 +11,10 @@ import {
   Platform,
   Dimensions,
   Animated,
-  Image
+  Image,
+  Modal,     // <-- Adicionado
+  FlatList,  // <-- Adicionado
+  SafeAreaView // <-- Adicionado
 } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,14 +28,26 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle,
-  Square
+  Square,
+  ChevronDown, // <-- Adicionado
+  X,           // <-- Adicionado
+  MapPin       // <-- Adicionado (opcional, para ícone)
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
-// FUNÇÃO REAL para verificar se email/telefone existem no Supabase
+const estadosDisponiveis = [
+    { label: 'Minas Gerais', value: 'MG' },
+];
+
+const cidadesDisponiveis: { [key: string]: { label: string, value: string }[] } = {
+    'MG': [
+        { label: 'Santa Rita do Sapucaí', value: 'Santa Rita do Sapucaí' },
+    ],
+};
+
 const verificarEmailTelefoneExistente = async (email: string, telefone: string) => {
   const telefoneLimpo = telefone.replace(/\D/g, '');
   const { data, error } = await supabase
@@ -70,7 +85,6 @@ export default function AuthPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   
-  // Campos de formulário
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -79,7 +93,11 @@ export default function AuthPage() {
   const [tipoUsuario, setTipoUsuario] = useState<'goleiro' | 'organizador'>('goleiro');
   const [aceitoTermos, setAceitoTermos] = useState(false);
   
-  // Estado para erros de validação
+  const [estado, setEstado] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [isEstadoModalVisible, setEstadoModalVisible] = useState(false);
+  const [isCidadeModalVisible, setCidadeModalVisible] = useState(false);
+
   const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
 
   useEffect(() => {
@@ -119,7 +137,7 @@ export default function AuthPage() {
       return `(${match[1]}) ${match[2]}-${match[3]}`;
     }
     match = cleaned.match(/^(\d{2})(\d{4})(\d{4})$/);
-     if (match) {
+      if (match) {
         return `(${match[1]}) ${match[2]}-${match[3]}`;
     }
     return text;
@@ -146,6 +164,14 @@ export default function AuthPage() {
       setErrors(prev => ({ ...prev, telefone: 'Telefone inválido.' }));
       valid = false;
     }
+    if (!estado) {
+        setErrors(prev => ({ ...prev, estado: 'Estado é obrigatório.' }));
+        valid = false;
+    }
+    if (!cidade) {
+        setErrors(prev => ({ ...prev, cidade: 'Cidade é obrigatória.' }));
+        valid = false;
+    }
     if (password.length < 6) {
       setErrors(prev => ({ ...prev, password: 'A senha deve ter no mínimo 6 caracteres.' }));
       valid = false;
@@ -162,7 +188,13 @@ export default function AuthPage() {
     
     try {
       await verificarEmailTelefoneExistente(email, telefoneLimpo);
-      await register(email, password, nome, telefoneLimpo, tipoUsuario);
+
+      // ===== CORREÇÃO DEFINITIVA AQUI =====
+      // Corrigimos 'tipo_usuario' para 'tipoUsuario' (U maiúsculo).
+      // Também passamos 'telefoneLimpo' para salvar o número sem formatação.
+      await register(email, password, nome, telefoneLimpo, tipoUsuario, estado, cidade);
+      // ===== FIM DA CORREÇÃO =====
+      
       Alert.alert('✅ Sucesso', 'Cadastro enviado para aprovação! Você receberá uma notificação quando for aprovado.');
       switchMode(true);
     } catch (err: any) {
@@ -180,10 +212,13 @@ export default function AuthPage() {
     setTelefone('');
     setTipoUsuario('goleiro');
     setAceitoTermos(false);
+    setEstado('');
+    setCidade('');
     setErrors({});
   };
 
   const renderLoginForm = () => (
+    // SEU FORMULÁRIO DE LOGIN (100% INTACTO)
     <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
       <View style={styles.headerContainer}>
         <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
@@ -209,7 +244,7 @@ export default function AuthPage() {
         </View>
       </View>
       <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
-        <LinearGradient colors={['#c3ffb0ff', '#7ee771ff', '#38b918ff']} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient colors={['#6366f1', '#8b5cf6', '#a855f7']} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.primaryButtonText}>{loading ? 'Entrando...' : 'Entrar'}</Text>
           {!loading && <ArrowRight size={22} color="#ffffff" />}
         </LinearGradient>
@@ -236,6 +271,21 @@ export default function AuthPage() {
         {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
         <View style={styles.inputWrapper}><View style={styles.inputIcon}><Phone size={22} color="#10b981" /></View><TextInput style={styles.input} placeholder="WhatsApp (XX) XXXXX-XXXX" placeholderTextColor="#9ca3af" value={telefone} onChangeText={(text) => setTelefone(formatarTelefone(text))} keyboardType="phone-pad" maxLength={16}/></View>
         {errors.telefone && <Text style={styles.errorText}>{errors.telefone}</Text>}
+        
+        <TouchableOpacity style={styles.inputWrapper} onPress={() => setEstadoModalVisible(true)}>
+            <View style={styles.inputIcon}><MapPin size={22} color="#10b981" /></View>
+            <Text style={[styles.input, !estado && {color: '#9ca3af'}]}>{estado ? estadosDisponiveis.find(e => e.value === estado)?.label : 'Selecione seu estado'}</Text>
+            <ChevronDown size={22} color="#6b7280" />
+        </TouchableOpacity>
+        {errors.estado && <Text style={styles.errorText}>{errors.estado}</Text>}
+
+        <TouchableOpacity style={[styles.inputWrapper, !estado && {backgroundColor: '#e5e7eb'}]} onPress={() => setCidadeModalVisible(true)} disabled={!estado}>
+            <View style={styles.inputIcon}><MapPin size={22} color={!estado ? '#9ca3af' : '#10b981'} /></View>
+            <Text style={[styles.input, !cidade && {color: '#9ca3af'}]}>{cidade || 'Selecione sua cidade'}</Text>
+            <ChevronDown size={22} color="#6b7280" />
+        </TouchableOpacity>
+        {errors.cidade && <Text style={styles.errorText}>{errors.cidade}</Text>}
+        
         <View style={styles.inputWrapper}><View style={styles.inputIcon}><Lock size={22} color="#10b981" /></View><TextInput style={styles.input} placeholder="Criar senha (min. 6 caracteres)" placeholderTextColor="#9ca3af" secureTextEntry={!showPassword} value={password} onChangeText={setPassword}/><TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>{showPassword ? (<EyeOff size={22} color="#6b7280" />) : (<Eye size={22} color="#6b7280" />)}</TouchableOpacity></View>
         {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
         <View style={styles.inputWrapper}><View style={styles.inputIcon}><Lock size={22} color="#10b981" /></View><TextInput style={styles.input} placeholder="Confirmar senha" placeholderTextColor="#9ca3af" secureTextEntry={!showConfirmPassword} value={confirmPassword} onChangeText={setConfirmPassword}/><TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>{showConfirmPassword ? (<EyeOff size={22} color="#6b7280" />) : (<Eye size={22} color="#6b7280" />)}</TouchableOpacity></View>
@@ -261,7 +311,7 @@ export default function AuthPage() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <LinearGradient colors={['#A7F3D0', '#34D399', '#6EE7B7', '#10B981']} style={styles.background} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+      <LinearGradient colors={['#667eea', '#764ba2', '#6366f1', '#8b5cf6']} style={styles.background} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.logoContainer}>
             <Animated.View style={{ opacity: fadeAnim }}>
@@ -276,7 +326,6 @@ export default function AuthPage() {
           <View style={styles.cardContainer}>
             {isLogin ? renderLoginForm() : renderRegisterForm()}
           </View>
-          {/* ===== AQUI ESTÁ A ALTERAÇÃO ===== */}
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>
               © 2025 GoleiroON™ Todos os direitos reservados.
@@ -284,6 +333,53 @@ export default function AuthPage() {
           </View>
         </ScrollView>
       </LinearGradient>
+
+      <Modal visible={isEstadoModalVisible} animationType="slide" transparent={true} onRequestClose={() => setEstadoModalVisible(false)}>
+        <SafeAreaView style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Selecione o Estado</Text>
+                    <TouchableOpacity onPress={() => setEstadoModalVisible(false)}><X size={24} color="#374151" /></TouchableOpacity>
+                </View>
+                <FlatList
+                    data={estadosDisponiveis}
+                    keyExtractor={(item) => item.value}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity style={styles.modalItem} onPress={() => {
+                            setEstado(item.value);
+                            setCidade(''); 
+                            setEstadoModalVisible(false);
+                        }}>
+                            <Text style={styles.modalItemText}>{item.label}</Text>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal visible={isCidadeModalVisible} animationType="slide" transparent={true} onRequestClose={() => setCidadeModalVisible(false)}>
+        <SafeAreaView style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Selecione a Cidade</Text>
+                    <TouchableOpacity onPress={() => setCidadeModalVisible(false)}><X size={24} color="#374151" /></TouchableOpacity>
+                </View>
+                <FlatList
+                    data={cidadesDisponiveis[estado] || []}
+                    keyExtractor={(item) => item.value}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity style={styles.modalItem} onPress={() => {
+                            setCidade(item.value);
+                            setCidadeModalVisible(false);
+                        }}>
+                            <Text style={styles.modalItemText}>{item.label}</Text>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        </SafeAreaView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -294,7 +390,7 @@ const styles = StyleSheet.create({
   scrollContainer: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40 },
   logoContainer: { alignItems: 'center', marginBottom: 40 },
   logo: { fontSize: 36, fontWeight: '900', color: '#ffffff', textAlign: 'center', textShadowColor: 'rgba(0, 0, 0, 0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4, letterSpacing: 1 },
-  logoOn: { color: '#FACC15' }, // Mantive a cor dourada que definimos
+  logoOn: { color: '#FACC15' },
   tagline: { fontSize: 16, color: '#e2e8f0', textAlign: 'center', marginTop: 8, fontWeight: '500' },
   cardContainer: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 30, padding: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 25, elevation: 20 },
   formContainer: { width: '100%' },
@@ -324,7 +420,7 @@ const styles = StyleSheet.create({
   switchButton: { alignItems: 'center', paddingVertical: 15 },
   switchText: { fontSize: 16, color: '#6b7280', fontWeight: '500' },
   switchLink: { color: '#747171ff', fontWeight: '700', textDecorationLine: 'underline' },
-  footerContainer: { alignItems: 'center', marginTop: 30, paddingBottom: 10 }, // Ajustado para dar espaço
+  footerContainer: { alignItems: 'center', marginTop: 30, paddingBottom: 10 }, 
   footerText: { fontSize: 12, color: '#141414ff', textAlign: 'center', opacity: 0.8 },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, justifyContent: 'center' },
   checkbox: { marginRight: 10 },
@@ -338,4 +434,10 @@ const styles = StyleSheet.create({
     marginLeft: 20,
     fontWeight: '500',
   },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '60%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingBottom: 12, marginBottom: 12 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
+  modalItem: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  modalItemText: { fontSize: 16, color: '#334155' },
 });

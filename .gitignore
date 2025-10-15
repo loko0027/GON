@@ -14,6 +14,7 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+google-services.json # <-- ADICIONADO AQUI PARA SEGURANÇA EXTRA
 
 # metro bundler cache and health check
 .metro-health-check*

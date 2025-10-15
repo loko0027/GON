@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { Settings, Percent, ChartBar as BarChart3, Bell, Eye, Calendar, Clock } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 Função para enviar push via Expo API (original, sem alterações)
+// Função para enviar push via Expo API (sem alterações)
 async function sendPushNotification(tokens: string[], title: string, body: string) {
   try {
     const messages = tokens.map(token => ({
@@ -36,62 +36,74 @@ async function sendPushNotification(tokens: string[], title: string, body: strin
 
 export default function AdminTab() {
   const { user } = useAuth();
-  const { convocacoes, saldos, recargas, saques } = useApp();
+  // ADICIONADO: 'loadData' para ser usado no refresh
+  const { convocacoes, saldos, recargas, saques, loadData } = useApp();
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Estados da Aba de Taxas
   const [taxas, setTaxas] = useState({
     app: 0,
     dia: 0,
     hora: 0,
     goleiro: 0,
-    avancado: 0,
-    meio: 0,
-    intermediario: 0
   });
   const [loadingTaxas, setLoadingTaxas] = useState(true);
   const [savingTaxas, setSavingTaxas] = useState(false);
-
-  // Estados da Aba de Notificações
   const [notification, setNotification] = useState({ title: '', message: '' });
-
-  // Estado para os cronômetros da aba de monitoramento
   const [temposRestantes, setTemposRestantes] = useState<{ [key: string]: string }>({});
 
-  // Lógica para buscar as taxas do Supabase ao carregar
-  useEffect(() => {
-    const fetchTaxas = async () => {
-      setLoadingTaxas(true);
-      try {
-        const { data, error } = await supabase
-          .from('configuracoes_taxas')
-          .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro, taxa_avancado, taxa_meio, taxa_intermediario')
-          .eq('id', 1)
-          .single();
+  // ADICIONADO: Estado para controlar a animação do refresh
+  const [refreshing, setRefreshing] = useState(false);
 
-        if (error) throw error;
-        if (data) {
-          setTaxas({
-            app: data.taxa_app,
-            dia: data.taxa_dia,
-            hora: data.taxa_hora,
-            goleiro: data.taxa_goleiro,
-            avancado: data.taxa_avancado,
-            meio: data.taxa_meio,
-            intermediario: data.taxa_intermediario
-          });
-        }
-      } catch (error) {
-        console.error("Erro ao buscar taxas:", error);
-        Alert.alert("Erro", "Não foi possível carregar as taxas do sistema.");
-      } finally {
-        setLoadingTaxas(false);
+  // A lógica de buscar taxas foi movida para uma função reutilizável com 'useCallback'
+  const fetchTaxas = useCallback(async () => {
+    setLoadingTaxas(true);
+    try {
+      const { data, error } = await supabase
+        .from('configuracoes_taxas')
+        .select('taxa_app, taxa_dia, taxa_hora, taxa_goleiro')
+        .eq('id', 1)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setTaxas({
+          app: data.taxa_app,
+          dia: data.taxa_dia,
+          hora: data.taxa_hora,
+          goleiro: data.taxa_goleiro,
+        });
       }
-    };
-    fetchTaxas();
-  }, []);
+    } catch (error) {
+      console.error("Erro ao buscar taxas:", error);
+      Alert.alert("Erro", "Não foi possível carregar as taxas do sistema.");
+    } finally {
+      setLoadingTaxas(false);
+    }
+  }, []); // Array de dependências vazio
 
-  // Efeito para atualizar os cronômetros a cada segundo
+  // O useEffect inicial agora só chama a função criada acima
+  useEffect(() => {
+    fetchTaxas();
+  }, [fetchTaxas]);
+
+  // ADICIONADO: Função que será executada ao puxar a tela para baixo
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true); // Ativa o indicador de loading
+    try {
+      // Executa a atualização dos dados globais (do AppContext) e das taxas (locais) em paralelo
+      await Promise.all([
+        loadData(),
+        fetchTaxas()
+      ]);
+    } catch (error) {
+        console.error("Erro durante o refresh:", error);
+        Alert.alert("Erro", "Não foi possível atualizar os dados.");
+    } finally {
+        setRefreshing(false); // Desativa o indicador de loading ao finalizar
+    }
+  }, [loadData, fetchTaxas]);
+
+  // Efeito para atualizar os cronômetros (sem alterações)
   useEffect(() => {
     if (activeTab !== 'monitoramento') return;
 
@@ -138,32 +150,36 @@ export default function AdminTab() {
 
   const handleSendNotification = async () => {
     if (!notification.title || !notification.message) {
-      Alert.alert("Erro", "Preencha título e mensagem.");
+      Alert.alert("Erro", "Preencha o título e a mensagem da notificação.");
       return;
     }
     try {
-      const { data: tokensData, error } = await supabase
-        .from('user_push_tokens')
-        .select(`expo_push_token, usuario (id, status_aprovacao)`);
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('push_token')
+        .eq('status_aprovacao', 'aprovado')
+        .not('push_token', 'is', null);
+
       if (error) throw error;
-      const tokens = tokensData
-        .filter(t => t.usuario?.status_aprovacao === 'aprovado')
-        .map(t => t.expo_push_token)
-        .filter(Boolean);
+
+      const tokens = data.map(u => u.push_token).filter(Boolean);
+
       if (tokens.length === 0) {
-        Alert.alert("Aviso", "Nenhum usuário aprovado com token de notificação encontrado.");
+        Alert.alert("Aviso", "Nenhum usuário aprovado com token de notificação foi encontrado.");
         return;
       }
+
       await sendPushNotification(tokens, notification.title, notification.message);
-      Alert.alert("Sucesso", "Notificação enviada para os usuários!");
+      
+      Alert.alert("Sucesso", `Notificação enviada para ${tokens.length} usuários!`);
       setNotification({ title: '', message: '' });
+
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao buscar tokens ou enviar notificação:", err);
       Alert.alert("Erro", "Não foi possível enviar a notificação.");
     }
   };
 
-  // --- Funções Auxiliares para a Nova Aba ---
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'pendente': return { text: 'PENDENTE', color: '#D97706' };
@@ -184,7 +200,7 @@ export default function AdminTab() {
     return `${minutes}min`;
   };
 
-  // --- Funções de Renderização das Abas ---
+  // --- Funções de Renderização das Abas (sem alterações) ---
   const renderOverview = () => (
     <View style={styles.tabContent}>
       <View style={styles.statsGrid}>
@@ -195,41 +211,16 @@ export default function AdminTab() {
         <View style={styles.statCard}><View style={styles.statCardInner}><Text style={styles.statNumber}>R$ {stats.totalRecargas.toFixed(2)}</Text><Text style={styles.statLabel}>Total Recargas</Text></View></View>
         <View style={styles.statCard}><View style={styles.statCardInner}><Text style={styles.statNumber}>{stats.saquesPendentes}</Text><Text style={styles.statLabel}>Saques Pendentes</Text></View></View>
       </View>
-
       <View style={styles.ratesSection}>
-        <Text style={styles.sectionTitle}>💰 Taxas do Aplicativo</Text>
+        <Text style={styles.sectionTitle}>💰 Valores e Taxas Atuais (em R$)</Text>
         {loadingTaxas ? (
           <ActivityIndicator size="small" color="#7c3aed" style={{ marginVertical: 20 }} />
         ) : (
           <View style={styles.ratesGrid}>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>App</Text>
-              <Text style={styles.rateValue}>{taxas.app.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Fim de Semana</Text>
-              <Text style={styles.rateValue}>{taxas.dia.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Horário de Pico</Text>
-              <Text style={styles.rateValue}>{taxas.hora.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Goleiro</Text>
-              <Text style={styles.rateValue}>{taxas.goleiro.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Avançado</Text>
-              <Text style={styles.rateValue}>{taxas.avancado.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Meio</Text>
-              <Text style={styles.rateValue}>{taxas.meio.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.rateCard}>
-              <Text style={styles.rateLabel}>Intermediário</Text>
-              <Text style={styles.rateValue}>{taxas.intermediario.toFixed(1)}%</Text>
-            </View>
+            <View style={styles.rateCard}><Text style={styles.rateLabel}>App (Taxa)</Text><Text style={styles.rateValue}>R$ {taxas.app.toFixed(2)}</Text></View>
+            <View style={styles.rateCard}><Text style={styles.rateLabel}>Dia (Adicional)</Text><Text style={styles.rateValue}>R$ {taxas.dia.toFixed(2)}</Text></View>
+            <View style={styles.rateCard}><Text style={styles.rateLabel}>Hora (Adicional)</Text><Text style={styles.rateValue}>R$ {taxas.hora.toFixed(2)}</Text></View>
+            <View style={styles.rateCard}><Text style={styles.rateLabel}>Goleiro (Base)</Text><Text style={styles.rateValue}>R$ {taxas.goleiro.toFixed(2)}</Text></View>
           </View>
         )}
       </View>
@@ -316,14 +307,11 @@ export default function AdminTab() {
             taxa_dia: taxas.dia,
             taxa_hora: taxas.hora,
             taxa_goleiro: taxas.goleiro,
-            taxa_avancado: taxas.avancado,
-            taxa_meio: taxas.meio,
-            taxa_intermediario: taxas.intermediario,
             updated_at: new Date().toISOString(),
           })
           .eq('id', 1);
         if (error) throw error;
-        Alert.alert("Sucesso!", "As taxas foram atualizadas com sucesso.");
+        Alert.alert("Sucesso!", "Os valores foram atualizados com sucesso.");
       } catch (error) {
         console.error("Erro ao salvar taxas:", error);
         Alert.alert("Erro", "Não foi possível salvar as alterações.");
@@ -331,19 +319,34 @@ export default function AdminTab() {
         setSavingTaxas(false);
       }
     };
+
     if (loadingTaxas) {
       return <ActivityIndicator size="large" color="#7c3aed" style={{ marginTop: 40 }} />;
     }
     return (
       <View style={styles.tabContent}>
-        <Text style={styles.sectionTitle}>⚙️ Ajuste Manual de Taxas</Text>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do App (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 10.5" value={String(taxas.app)} onChangeText={(text) => setTaxas(prev => ({ ...prev, app: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa Adicional do Dia (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 5" value={String(taxas.dia)} onChangeText={(text) => setTaxas(prev => ({ ...prev, dia: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa Adicional da Hora (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 2.5" value={String(taxas.hora)} onChangeText={(text) => setTaxas(prev => ({ ...prev, hora: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Goleiro (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 12.0" value={String(taxas.goleiro)} onChangeText={(text) => setTaxas(prev => ({ ...prev, goleiro: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Avançado (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 8.0" value={String(taxas.avancado)} onChangeText={(text) => setTaxas(prev => ({ ...prev, avancado: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Meio (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 15.0" value={String(taxas.meio)} onChangeText={(text) => setTaxas(prev => ({ ...prev, meio: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
-        <View style={styles.inputGroup}><Text style={styles.label}>Taxa do Intermediário (%)</Text><TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 9.0" value={String(taxas.intermediario)} onChangeText={(text) => setTaxas(prev => ({ ...prev, intermediario: parseFloat(text.replace(',', '.')) || 0 }))} /></View>
+        <Text style={styles.sectionTitle}>⚙️ Ajuste de Valores (em R$)</Text>
+        <Text style={styles.infoText}>
+          Ajuste os valores base aqui. O valor final para o usuário é calculado automaticamente com base no nível do goleiro e nas regras de dia/horário.
+        </Text>
+        
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Taxa do App (valor fixo por convocação)</Text>
+          <TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 5.00" value={String(taxas.app)} onChangeText={(text) => setTaxas(prev => ({ ...prev, app: parseFloat(text.replace(',', '.')) || 0 }))} />
+        </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Adicional por Dia (Sexta a Segunda)</Text>
+          <TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 10.00" value={String(taxas.dia)} onChangeText={(text) => setTaxas(prev => ({ ...prev, dia: parseFloat(text.replace(',', '.')) || 0 }))} />
+        </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Adicional por Horário (09:00 - 15:00)</Text>
+          <TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 5.00" value={String(taxas.hora)} onChangeText={(text) => setTaxas(prev => ({ ...prev, hora: parseFloat(text.replace(',', '.')) || 0 }))} />
+        </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Valor Base do Goleiro (para nível Iniciante)</Text>
+          <TextInput style={styles.input} keyboardType="numeric" placeholder="Ex: 30.00" value={String(taxas.goleiro)} onChangeText={(text) => setTaxas(prev => ({ ...prev, goleiro: parseFloat(text.replace(',', '.')) || 0 }))} />
+        </View>
+        
         <TouchableOpacity style={[styles.confirmButton, { marginTop: 20 }, savingTaxas && { backgroundColor: '#a5b4fc' }]} onPress={handleSaveChanges} disabled={savingTaxas}>
           {savingTaxas ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Salvar Alterações</Text>}
         </TouchableOpacity>
@@ -375,7 +378,19 @@ export default function AdminTab() {
       <View style={styles.tabBar}>
         {tabs.map((tab) => (<TouchableOpacity key={tab.id} style={[styles.tabButton, activeTab === tab.id && styles.tabButtonActive]} onPress={() => setActiveTab(tab.id)}><tab.icon size={18} color={activeTab === tab.id ? '#7c3aed' : '#64748b'} /><Text style={[styles.tabButtonText, activeTab === tab.id && styles.tabButtonTextActive]}>{tab.label}</Text></TouchableOpacity>))}
       </View>
-      <ScrollView style={styles.content}>
+      
+      {/* ADICIONADO: 'refreshControl' ao ScrollView principal */}
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#7c3aed"]} // Cor do indicador de loading no Android
+            tintColor={"#7c3aed"} // Cor do indicador de loading no iOS
+          />
+        }
+      >
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'monitoramento' && renderMonitoramento()}
         {activeTab === 'taxas' && renderTaxas()}
@@ -457,5 +472,12 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e2e8f0',
     marginVertical: 20,
-  }
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });

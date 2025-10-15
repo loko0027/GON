@@ -10,7 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { saquePixService } from '@/services/saquePixService';
 
-// --- Função auxiliar para calcular CRC16 (Sua função) ---
+// --- Função auxiliar para calcular CRC16 ---
 function crc16(str: string) {
     let crc = 0xFFFF;
     const polynomial = 0x1021;
@@ -27,8 +27,7 @@ function crc16(str: string) {
     return crc.toString(16).toUpperCase().padStart(4, "0");
 }
 
-// --- Função para gerar payload Pix válido (Sua função) ---
-// REVISÃO: Corrigido um bug onde a variável 'add' era usada antes de ser definida.
+// --- Função para gerar payload Pix válido (VERSÃO CORRIGIDA) ---
 function gerarPayloadPix(valor: number) {
     const chavePix = "yafesm.srs@hotmail.com";
     const nomeRecebedor = "Pablo Vinicios Matias Gon";
@@ -50,7 +49,7 @@ function gerarPayloadPix(valor: number) {
     const cidade = cidadeRecebedor.toUpperCase().slice(0, 15);
     payload += "60" + String(cidade.length).padStart(2, "0") + cidade;
     const txid = `recarga${Date.now()}`.slice(0, 25);
-    const additionalData = "05" + String(txid.length).padStart(2, "0") + txid; // Correção aqui
+    const additionalData = "05" + String(txid.length).padStart(2, "0") + txid; // Correção estava aqui
     payload += "62" + String(additionalData.length).padStart(2, "0") + additionalData;
     const payloadForCrc = payload + "63" + "04";
     const crc = crc16(payloadForCrc);
@@ -67,7 +66,7 @@ interface Recarga {
     status: 'pendente' | 'aprovado' | 'rejeitado';
     created_at: string;
     tipo: 'recarga';
-    organizador?: { nome: string; email: string; };
+    organizador?: { nome: string; email: string; }; // Adicionado para consistência
 }
 
 interface Saque {
@@ -99,7 +98,6 @@ export default function CarteiraTab() {
     const [loadingHistorico, setLoadingHistorico] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Condição unificada para saber se a tela está pronta para ser exibida
     const isScreenLoading = appLoading || authLoading || !users;
 
     const carregarHistoricoCompleto = useCallback(async () => {
@@ -171,7 +169,6 @@ export default function CarteiraTab() {
              Alert.alert('Erro', 'Dados do usuário não carregados. Tente novamente.');
              return;
         }
-
         const saldo = getSaldo(user.id);
         const valor = parseFloat(valorSaque);
 
@@ -262,7 +259,6 @@ export default function CarteiraTab() {
       return null;
     }
     
-    // Renderiza a tela de carregamento até que todos os dados essenciais estejam prontos
     if (isScreenLoading) {
         return (
             <View style={styles.loadingContainer}>
@@ -272,7 +268,6 @@ export default function CarteiraTab() {
         );
     }
     
-    // Após o carregamento, busca o saldo e define as variáveis
     const saldo = getSaldo(user.id);
     const isAdmin = user.tipo_usuario === 'admin';
     const isGoleiro = user.tipo_usuario === 'goleiro';
@@ -361,12 +356,12 @@ export default function CarteiraTab() {
                     <Text style={styles.noTransactionsText}>Nenhuma transação realizada ainda.</Text>
                 ) : (
                     historicoTransacoes.map((transacao) => (
-                        <View key={transacao.id} style={styles.historyItem}>
+                        <View key={`${transacao.tipo}-${transacao.id}`} style={styles.historyItem}>
                             <View style={styles.historyIcon}>
                                 {transacao.tipo === 'recarga' ? (
-                                    <ArrowDownLeft size={16} color={transacao.status === 'aprovado' ? '#10B981' : '#F59E0B'} />
+                                    <ArrowDownLeft size={16} color={transacao.status === 'aprovado' ? '#10B981' : transacao.status === 'pendente' ? '#F59E0B' : '#EF4444'} />
                                 ) : (
-                                    <ArrowUpRight size={16} color={transacao.status === 'aprovado' ? '#EF4444' : '#F59E0B'} />
+                                    <ArrowUpRight size={16} color={transacao.status === 'aprovado' ? '#10B981' : transacao.status === 'pendente' ? '#F59E0B' : '#EF4444'} />
                                 )}
                             </View>
                             <View style={styles.historyDetails}>
@@ -389,13 +384,77 @@ export default function CarteiraTab() {
                 )}
             </View>
 
-            {/* Modals */}
+            {/* Modal de recarga */}
             <Modal animationType="slide" transparent={true} visible={showRecarga} onRequestClose={() => setShowRecarga(false)}>
-                {/* ... conteúdo do modal de recarga ... */}
+                <View style={styles.centeredView}>
+                    <View style={styles.modalView}>
+                        <Text style={styles.modalTitle}>💳 Recarregar Coins</Text>
+                        <View style={styles.valoresSugeridos}>
+                            <Text style={styles.sectionTitle}>Valores Sugeridos</Text>
+                            <View style={styles.valoresGrid}>
+                                {valoresSugeridos.map((valor) => (
+                                    <TouchableOpacity key={valor} style={styles.valorSugerido} onPress={() => setValorRecarga(valor.toString())}>
+                                        <Text style={styles.valorSugeridoText}>R$ {valor}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Valor (R$)</Text>
+                            <TextInput style={styles.input} placeholder="Digite o valor" value={valorRecarga} onChangeText={setValorRecarga} keyboardType="numeric" editable={!loadingActions} />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Método de Pagamento</Text>
+                            <View style={styles.paymentMethods}>
+                                <TouchableOpacity style={[styles.paymentMethod, styles.paymentMethodActive]} disabled={true}>
+                                    <Smartphone size={20} color={'#10B981'} />
+                                    <Text style={[styles.paymentMethodText, styles.paymentMethodTextActive]}>PIX</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowRecarga(false)} disabled={loadingActions}>
+                                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.confirmButton} onPress={handleRecarga} disabled={loadingActions || !valorRecarga}>
+                                {loadingActions ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Recarregar</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
+            
+            {/* Modal PIX */}
             <Modal animationType="slide" transparent={true} visible={showPixModal} onRequestClose={handleFinalizarPix}>
-                {/* ... conteúdo do modal de PIX ... */}
+                <View style={styles.centeredView}>
+                    <View style={styles.modalView}>
+                        <TouchableOpacity style={styles.closeModalButton} onPress={handleFinalizarPix}>
+                            <XCircle size={24} color="#6b7280" />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>💰 PIX para Recarga</Text>
+                        <View style={styles.pixInfoContainer}>
+                            <Text style={styles.pixInfoText}>💎 <Text style={styles.pixInfoHighlight}>Valor escolhido: R$ {valorRecarga}</Text></Text>
+                            <Text style={styles.pixInfoText}>⚠️ O organizador deve pagar o valor escolhido via PIX</Text>
+                        </View>
+                        {pixLink && (
+                            <View style={styles.qrCodeContainer}>
+                                <QRCode value={pixLink} size={200} />
+                                <Text style={styles.qrCodeText}>Escaneie o QR Code com seu app bancário</Text>
+                            </View>
+                        )}
+                        {pixLink && (
+                            <View style={styles.pixLinkContainer}>
+                                <Text style={styles.pixLink} numberOfLines={2}>{pixLink}</Text>
+                                <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+                                    <Text style={styles.copyButtonText}>Copiar PIX</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                </View>
             </Modal>
+
+            {/* Modal Saque */}
             <Modal animationType="slide" transparent={true} visible={showSaque} onRequestClose={() => setShowSaque(false)}>
                 <View style={styles.centeredView}>
                     <View style={styles.modalView}>
@@ -412,19 +471,28 @@ export default function CarteiraTab() {
                             <TouchableOpacity style={styles.cancelButton} onPress={() => setShowSaque(false)} disabled={loadingActions}>
                                 <Text style={styles.cancelButtonText}>Cancelar</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.confirmButton, loadingActions && styles.buttonDisabled]} 
-                                onPress={handleSaque} 
-                                disabled={loadingActions}
-                            >
+                            <TouchableOpacity style={styles.confirmButton} onPress={handleSaque} disabled={loadingActions || !valorSaque || !chavePix}>
                                 {loadingActions ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Sacar</Text>}
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
+
+            {/* Modal de Sucesso do Saque */}
             <Modal animationType="slide" transparent={true} visible={showSaqueSuccess} onRequestClose={() => setShowSaqueSuccess(false)}>
-                {/* ... conteúdo do modal de sucesso de saque ... */}
+                <View style={styles.centeredView}>
+                    <View style={[styles.modalView, styles.successModal]}>
+                        <CheckCircle size={48} color="#10B981" style={{ marginBottom: 16 }} />
+                        <Text style={styles.successTitle}>Saque Solicitado com Sucesso!</Text>
+                        <Text style={styles.successMessage}>
+                            Seu pedido de saque foi enviado e o PIX será efetivado em até **1 dia útil** após a aprovação do administrador.
+                        </Text>
+                        <TouchableOpacity style={styles.successButton} onPress={() => setShowSaqueSuccess(false)}>
+                            <Text style={styles.successButtonText}>Entendido</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
         </ScrollView>
     );
@@ -477,7 +545,7 @@ const styles = StyleSheet.create({
     historyDetails: { flex: 1, marginLeft: 6 },
     historyText: { fontSize: 14, fontWeight: '500', color: '#111827' },
     historyDate: { fontSize: 12, color: '#6b7280' },
-    historyStatus: { width: 60, alignItems: 'center' },
+    historyStatus: { width: 80, alignItems: 'flex-end' },
     centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
     modalView: { width: '90%', backgroundColor: 'white', borderRadius: 12, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#111827' },

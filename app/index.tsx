@@ -184,7 +184,7 @@ export default function Index() {
           ]}
         >
           <LinearGradient
-            colors={['#34D399', '#815ba7ff']}
+            colors={['#2563eb', '#815ba7ff']}
             style={styles.heroSection}
           >
             <Animated.View 

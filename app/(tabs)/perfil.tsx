@@ -238,7 +238,7 @@ export default function PerfilTab() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>GoleiroON v.4.0.02</Text>
+          <Text style={styles.footerText}>GoleiroON v.5.0.22</Text>
           <Text style={styles.footerSubtext}>Conectando o futebol amador</Text>
         </View>
       </ScrollView>

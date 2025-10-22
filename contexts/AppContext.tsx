@@ -154,6 +154,25 @@ export function AppProvider({ children }: AppProviderProps) {
   const dataLoadedForUserRef = useRef<string | null>(null);
   const dataClearedForNullUserRef = useRef(false);
 
+  // ==============================================================================
+  // ============================ INÍCIO DA CORREÇÃO ============================
+  // Funções de formatação movidas para cima para evitar erro de inicialização.
+  // ==============================================================================
+
+  const formatarData = useCallback((dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }, []);
+
+  const formatarMoeda = useCallback((valor: number): string => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+  }, []);
+
+  // ==============================================================================
+  // ============================= FIM DA CORREÇÃO ==============================
+  // ==============================================================================
+
+
   // ===== INÍCIO DA MODIFICAÇÃO =====
   // As funções de cálculo foram centralizadas em uma única função que retorna um objeto detalhado.
   const calcularDetalhesConvocacao = useCallback((
@@ -473,13 +492,30 @@ export function AppProvider({ children }: AppProviderProps) {
         saldo_coins: saldoUsuario.saldo_coins - convocacao.valor_retido,
         saldo_retido: (saldoUsuario.saldo_retido || 0) + convocacao.valor_retido
       }).eq('usuario_id', user.id);
+      
       await loadData();
-      Alert.alert('Sucesso', 'Convocação criada com sucesso!');
+
+      // ===== AQUI ESTÁ A LÓGICA DA MENSAGEM =====
+      // 1. Formatamos o valor (agora 'formatarMoeda' já existe)
+      const valorFormatado = formatarMoeda(convocacao.valor_retido);
+      
+      // 2. Usamos o valor formatado no novo texto do alerta
+      Alert.alert(
+        'Sucesso', 
+        `Sua convocação de ${valorFormatado} foi confirmada. Aguarde a resposta do goleiro!`
+      );
+      // ===== FIM DA LÓGICA DA MENSAGEM =====
+
     } catch (error: any) {
       console.error("Erro ao criar convocação:", error);
       Alert.alert('Erro', error.message || 'Não foi possível criar a convocação');
     }
-  }, [user, getSaldoUsuario, loadData]);
+  }, [
+      user, 
+      getSaldoUsuario, 
+      loadData, 
+      formatarMoeda // 3. Adicionamos 'formatarMoeda' no array de dependências
+  ]);
 
   const aceitarConvocacao = useCallback(async (convocacaoId: string): Promise<void> => {
     try {
@@ -821,14 +857,7 @@ export function AppProvider({ children }: AppProviderProps) {
     return convocacao?.avaliado_organizador || false;
   }, [convocacoes]);
 
-  const formatarData = useCallback((dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  }, []);
-
-  const formatarMoeda = useCallback((valor: number): string => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
-  }, []);
+  // As funções de formatação foram movidas para cima (linhas 173-182)
 
   // ===== INÍCIO DA MODIFICAÇÃO =====
   // O valor do contexto foi atualizado para expor a nova função de cálculo.

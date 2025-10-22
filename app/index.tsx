@@ -24,6 +24,7 @@ import {
   Clock,
   Zap
 } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase'; // Importa o Supabase
 
 const GOLIE_ICON_LOCAL = require('../assets//images/newicone.png'); 
 
@@ -35,12 +36,48 @@ export default function Index() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const [currentFeature, setCurrentFeature] = useState(0);
   
+  // State para os stats
+  const [stats, setStats] = useState({
+    goleiros: '...',
+    convocacoes: '...',
+    organizadores: '...'
+  });
+
   const fadeInAnim = useRef(new Animated.Value(0)).current;
   const slideInAnim = useRef(new Animated.Value(50)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Função para buscar stats públicos
+    const fetchPublicStats = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('estatisticas_publicas')
+          .select('total_goleiros, total_convocacoes_criadas, total_organizadores') // Coluna atualizada
+          .eq('id', 1)
+          .single();
+        
+        if (error || !data) {
+          throw new Error(error?.message || "Nenhum dado encontrado");
+        }
+
+        setStats({
+          goleiros: String(data.total_goleiros),
+          convocacoes: String(data.total_convocacoes_criadas), // Coluna atualizada
+          organizadores: String(data.total_organizadores)
+        });
+
+      } catch (err) {
+        console.error("Erro ao buscar estatísticas:", err);
+        // Fallback para os valores antigos se a busca falhar
+        setStats({ goleiros: '10+', convocacoes: '15+', organizadores: '5+' });
+      }
+    };
+    
+    fetchPublicStats(); // Chama a função
+
+    // ---- Restante do seu useEffect (animações) ----
     Animated.parallel([
       Animated.timing(fadeInAnim, {
         toValue: 1,
@@ -88,7 +125,7 @@ export default function Index() {
       rotateLoop.stop();
       clearInterval(featureInterval);
     };
-  }, []);
+  }, []); 
 
   if (loading) {
     return (
@@ -218,7 +255,6 @@ export default function Index() {
                   accessibilityLabel="Ícone de luva de goleiro"
                 />
                 
-                {/* ===== AQUI ESTÁ A ALTERAÇÃO ===== */}
                 <Text style={styles.heroTitleText}>
                   Goleiro<Text style={styles.heroTitleTextOn}>ON</Text>
                 </Text>
@@ -300,9 +336,11 @@ export default function Index() {
           <Text style={styles.statsTitle}>Junte-se à Comunidade</Text>
           <View style={styles.statsGrid}>
             {[
-              { number: '10+', label: 'Goleiros', icon: Users },
-              { number: '15+', label: 'Jogos', icon: TrendingUp },
-              { number: '5+', label: 'Organizadores', icon: Award },
+              { number: stats.goleiros, label: 'Goleiros', icon: Users },
+              // ===== MUDANÇA DO LABEL AQUI =====
+              { number: stats.convocacoes, label: 'Convocações', icon: TrendingUp }, 
+              // =================================
+              { number: stats.organizadores, label: 'Organizadores', icon: Award },
             ].map((stat, index) => (
               <Animated.View
                 key={index}
@@ -380,6 +418,7 @@ export default function Index() {
   );
 }
 
+// Seus estilos (Nenhuma mudança aqui)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -436,7 +475,6 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
     marginLeft: 10,
   },
-  // ===== NOVO ESTILO ADICIONADO =====
   heroTitleTextOn: {
     color: '#9d9b22', // Cor dourada/amarela do logo
   },

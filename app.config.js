@@ -4,7 +4,7 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "4.0.02",
+  version: "5.0.22",
   orientation: "portrait",
   icon: "./assets/images/newicone.png",
 
@@ -18,14 +18,12 @@ export default ({ config }) => ({
   userInterfaceStyle: "automatic",
 
   notification: {
-    iosDisplayInForeground: true, 
+    iosDisplayInForeground: true,
   },
 
   android: {
     package: "com.pablo095.goleiroon",
-    // ===== ALTERAÇÃO IMPORTANTE E OBRIGATÓRIA =====
-    versionCode: 4, // <-- AUMENTEI DE 1 PARA 2. AUMENTE PARA O PRÓXIMO NÚMERO DISPONÍVEL.
-    // ===============================================
+    versionCode: 7,
     permissions: [
       "CAMERA",
       "RECORD_AUDIO",
@@ -51,7 +49,6 @@ export default ({ config }) => ({
   plugins: [
     "expo-router",
     "expo-font",
-    "expo-web-browser",
     [
       "expo-notifications",
       {
@@ -64,9 +61,13 @@ export default ({ config }) => ({
       "expo-build-properties",
       {
         android: {
-          compileSdkVersion: 36,
-          targetSdkVersion: 36,
-          buildToolsVersion: "36.0.0",
+          // ===================================================================
+          //                           CORREÇÃO APLICADA
+          // O Expo SDK 53 exige o Android SDK 35. As versões foram atualizadas.
+          // ===================================================================
+          compileSdkVersion: 35,
+          targetSdkVersion: 35,
+          buildToolsVersion: "35.0.0",
         },
         ios: {
           deploymentTarget: "15.1",

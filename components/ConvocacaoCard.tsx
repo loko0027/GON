@@ -50,10 +50,10 @@ export default function ConvocacaoCard({ convocacao }: { convocacao: any }) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pendente': return '#D97706';
-      case 'aceito': return '#10B981';
-      case 'Perdida': return '#6B7280';
+      case 'aceito': return '#09ce8cff';
+      case 'Perdida': return '#64748B';
       case 'recusado': case 'cancelado': return '#EF4444';
-      default: return '#6B7280';
+      default: return '#29a503ff';
     }
   };
 

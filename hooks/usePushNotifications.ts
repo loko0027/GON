@@ -50,7 +50,7 @@ async function registerForPushNotificationsAsync(user: any) {
       throw new Error('O projectId do EAS não foi encontrado. Verifique a configuração em app.config.js.');
     }
     console.log("[Notificação] Tentando obter o push token...");
-    token = (await Notifications.getPushTokenAsync({ projectId })).data;
+    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     console.log(`[Notificação] Token obtido com sucesso: ${token}`);
   } catch (e: any) {
     console.error("ERRO CRÍTICO AO OBTER O PUSH TOKEN:", e);

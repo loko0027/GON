@@ -4,7 +4,7 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "5.0.22",
+  version: "5.0.24",
   orientation: "portrait",
   icon: "./assets/images/newicone.png",
 
@@ -23,7 +23,7 @@ export default ({ config }) => ({
 
   android: {
     package: "com.pablo095.goleiroon",
-    versionCode: 7,
+    versionCode: 8,
     permissions: [
       "CAMERA",
       "RECORD_AUDIO",

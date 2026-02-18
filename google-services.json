@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "519847011863",
+    "project_id": "gon1-c08d5",
+    "storage_bucket": "gon1-c08d5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:519847011863:android:f1863afcee4594d9019e52",
+        "android_client_info": {
+          "package_name": "com.pablo095.goleiroon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoxb2sfvdQN0Gt1WfhJnQjCgkUMg9KOFc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

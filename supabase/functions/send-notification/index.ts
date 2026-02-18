@@ -12,33 +12,48 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Pega os dados que foram enviados para a função (ID do usuário, título e mensagem)
+    // 1️⃣ Recebe os dados enviados do app
     const { userId, title, message } = await req.json();
     if (!userId || !title || !message) {
-      throw new Error("Os campos 'userId', 'title', e 'message' são obrigatórios.");
+      throw new Error("Os campos 'userId', 'title' e 'message' são obrigatórios.");
     }
 
-    // 2. Conecta ao Supabase com permissão de administrador
+    // 2️⃣ Conecta ao Supabase com permissões administrativas
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 3. Busca o push_token do usuário específico no banco de dados
+    // 3️⃣ Busca o push_token do usuário
+    // ⚠️ Altere o nome da tabela ou coluna se necessário:
+    // - Tabela: 'usuarios' ou 'perfis'
+    // - Coluna: 'push_token' ou 'expo_push_token'
     const { data: userData, error: userError } = await supabaseAdmin
       .from('usuarios')
       .select('push_token')
       .eq('id', userId)
       .single();
 
-    if (userError || !userData || !userData.push_token) {
-      throw new Error(`Usuário ${userId} não encontrado ou não possui um push token.`);
+    if (userError || !userData?.push_token) {
+      throw new Error(`Usuário ${userId} não encontrado ou sem push_token.`);
     }
 
     const pushToken = userData.push_token;
     console.log(`Enviando notificação para o token: ${pushToken}`);
 
-    // 4. Monta a notificação e envia para os servidores da Expo
+    // 4️⃣ Monta a notificação com ícone customizado
+    const notificationPayload = {
+      to: pushToken,
+      sound: 'default',
+      title,
+      body: message,
+      priority: 'high',
+      android: {
+        icon: 'notification_icon', // 👈 nome do arquivo PNG em /drawable/
+        color: '#FF0000', // 👈 cor que vai aparecer no ícone
+      },
+    };
+
     const res = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
@@ -46,32 +61,27 @@ Deno.serve(async (req) => {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate',
       },
-      body: JSON.stringify({
-        to: pushToken,
-        sound: 'default',
-        title: title,
-        body: message,
-      }),
+      body: JSON.stringify(notificationPayload),
     });
 
     const responseBody = await res.json();
-    console.log("Resposta da API da Expo:", responseBody);
-    
+    console.log('Resposta da API da Expo:', responseBody);
+
+    // 5️⃣ Retorna sucesso ou erro conforme resposta
     if (responseBody.data?.status === 'error') {
       throw new Error(`Erro retornado pela Expo: ${responseBody.data.message}`);
     }
 
-    // 5. Retorna uma mensagem de sucesso
-    return new Response(JSON.stringify({ success: true, message: "Notificação enviada com sucesso!" }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({ success: true, message: 'Notificação enviada com sucesso!' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    );
 
   } catch (error) {
-    // Se algo der errado, retorna uma mensagem de erro
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    console.error('Erro ao enviar notificação:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    );
   }
 });

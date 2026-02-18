@@ -257,13 +257,16 @@ export default function AuthPage() {
 
   const renderRegisterForm = () => (
     <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
-      <View style={styles.headerContainer}>
-        <View style={[styles.iconContainer, { backgroundColor: '#10b98120' }]}>
-          <Sparkles size={40} color="#10b981" />
-        </View>
-        <Text style={styles.title}>Criar conta ⚽</Text>
-        <Text style={styles.subtitle}>Junte-se à maior comunidade de futebol amador</Text>
-      </View>
+<View style={styles.headerContainer}>
+  <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
+    <Image
+      source={require('@/assets/images/newicone.png')}
+      style={{ width: 100, height: 100, resizeMode: 'contain', marginTop: 16 }}
+    />
+  </View>
+  <Text style={styles.title}>Criar conta ⚽</Text>
+  <Text style={styles.subtitle}>Junte-se à maior comunidade de futebol amador</Text>
+</View>
       <View style={styles.inputContainer}>
         <View style={styles.inputWrapper}><View style={styles.inputIcon}><User size={22} color="#10b981" /></View><TextInput style={styles.input} placeholder="Nome completo" placeholderTextColor="#9ca3af" value={nome} onChangeText={setNome}/></View>
         {errors.nome && <Text style={styles.errorText}>{errors.nome}</Text>}

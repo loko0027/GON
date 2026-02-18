@@ -4,7 +4,7 @@ export default ({ config }) => ({
   ...config,
   name: "GoleiroON",
   slug: "goleiroon",
-  version: "5.0.24",
+  version: "5.10.11",
   orientation: "portrait",
   icon: "./assets/images/newicone.png",
 
@@ -23,7 +23,7 @@ export default ({ config }) => ({
 
   android: {
     package: "com.pablo095.goleiroon",
-    versionCode: 8,
+    versionCode: 10,
     permissions: [
       "CAMERA",
       "RECORD_AUDIO",
@@ -52,8 +52,8 @@ export default ({ config }) => ({
     [
       "expo-notifications",
       {
-        "icon": "./assets/images/Sino.png",
-        "color": "#FF0000",
+        "icon": "./assets/images/notification_icon.png",
+        "color": "#030303ff",
         "mode": "production",
       },
     ],
